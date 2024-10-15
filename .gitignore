@@ -1,2 +1,11 @@
 #venv
 venv/
+
+#pyc
+*.pyc
+
+#pycache
+__pycache__/
+
+#coverage
+.coverage
