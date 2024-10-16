@@ -37,6 +37,19 @@ class TestDataProcess(unittest.TestCase):
         self.assertEqual(preprocessed_data.shape[1], expected_columns)
         self.assertEqual(target_data.shape, (self.data.shape[0],))
 
+    def test_preprocess_data_with_augmentation(self):
+        # Test preprocessing data with augmentation
+        preprocessed_data, target_data = preprocess_data(
+            self.data, self.numerical_features, self.categorical_features, self.target_feature, augment=True, augmentation_factor=0.1)
+        # Check if the preprocessed data has the expected number of columns
+        num_categorical_columns = sum([len(self.data[col].unique()) for col in self.categorical_features])
+        expected_columns = len(self.numerical_features) + num_categorical_columns
+        self.assertEqual(preprocessed_data.shape[1], expected_columns)
+        self.assertEqual(target_data.shape, (self.data.shape[0],))
+        # Check if the data has been augmented
+        self.assertFalse(np.array_equal(preprocessed_data, preprocess_data(
+            self.data, self.numerical_features, self.categorical_features, self.target_feature)[0]))
+
     def test_get_data_splits(self):
         # Test splitting data into training and testing sets
         preprocessed_data, target_data = preprocess_data(
@@ -96,6 +109,29 @@ class TestDataProcess(unittest.TestCase):
         # Test loading data without specifying column names
         data = load_data('datasets/adults/adult.csv')
         self.assertEqual(data.shape[1], len(self.column_names))
+
+    def test_preprocess_data_different_parts(self):
+        # Test preprocessing different parts of the dataset
+        data_part = self.data.iloc[:100]  # Use the first 100 rows
+        preprocessed_data, target_data = preprocess_data(
+            data_part, self.numerical_features, self.categorical_features, self.target_feature)
+        num_categorical_columns = sum([len(data_part[col].unique()) for col in self.categorical_features])
+        expected_columns = len(self.numerical_features) + num_categorical_columns
+        self.assertEqual(preprocessed_data.shape[1], expected_columns)
+        self.assertEqual(target_data.shape, (data_part.shape[0],))
+
+    def test_preprocess_data_with_augmentation_different_parts(self):
+        # Test preprocessing different parts of the dataset with augmentation
+        data_part = self.data.iloc[:100]  # Use the first 100 rows
+        preprocessed_data, target_data = preprocess_data(
+            data_part, self.numerical_features, self.categorical_features, self.target_feature, augment=True, augmentation_factor=0.1)
+        num_categorical_columns = sum([len(data_part[col].unique()) for col in self.categorical_features])
+        expected_columns = len(self.numerical_features) + num_categorical_columns
+        self.assertEqual(preprocessed_data.shape[1], expected_columns)
+        self.assertEqual(target_data.shape, (data_part.shape[0],))
+        # Check if the data has been augmented
+        self.assertFalse(np.array_equal(preprocessed_data, preprocess_data(
+            data_part, self.numerical_features, self.categorical_features, self.target_feature)[0]))
 
 if __name__ == '__main__':
     unittest.main()
