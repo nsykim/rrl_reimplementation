@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
 from sklearn.compose import ColumnTransformer
@@ -10,7 +11,7 @@ def load_data(file_path, column_names=None):
     
     Args:
         file_path (str): Path to the CSV file.
-        Column_names (list): List of column names in case column names are not present in the CSV file.
+        column_names (list, optional): List of column names. If None, infer from the file.
     
     Returns:
         pd.DataFrame: Loaded data.
@@ -18,7 +19,7 @@ def load_data(file_path, column_names=None):
     data = pd.read_csv(file_path, header=None, names=column_names)
     return data
 
-def preprocess_data(data, numerical_features, categorical_features, target_feature=None):
+def preprocess_data(data, numerical_features, categorical_features, target_feature=None, augment=False, augmentation_factor=0.1):
     """
     Preprocess the data using scikit-learn's preprocessing utilities.
     
@@ -27,6 +28,8 @@ def preprocess_data(data, numerical_features, categorical_features, target_featu
         numerical_features (list): List of numerical feature names.
         categorical_features (list): List of categorical feature names.
         target_feature (str): Name of the target feature (optional).
+        augment (bool): Whether to apply data augmentation.
+        augmentation_factor (float): The factor by which to augment the data.
     
     Returns:
         np.ndarray: Preprocessed data.
@@ -54,10 +57,28 @@ def preprocess_data(data, numerical_features, categorical_features, target_featu
     features = data.drop(columns=[target_feature]) if target_feature else data
     preprocessed_data = preprocessor.fit_transform(features)
     
+    if augment:
+        preprocessed_data = augment_data(preprocessed_data, augmentation_factor)
+    
     if target_feature:
         target_data = data[target_feature]
         return preprocessed_data, target_data
     return preprocessed_data
+
+def augment_data(data, augmentation_factor=0.1):
+    """
+    Augment the dataset by adding noise to numerical features.
+    
+    Args:
+        data (np.ndarray): The dataset.
+        augmentation_factor (float): The factor by which to augment the data.
+    
+    Returns:
+        np.ndarray: The augmented dataset.
+    """
+    noise = np.random.normal(0, augmentation_factor, data.shape)
+    augmented_data = data + noise
+    return augmented_data
 
 def get_data_splits(data, target=None, test_size=0.2, stratify=False):
     """
