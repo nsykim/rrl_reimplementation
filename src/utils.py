@@ -94,3 +94,26 @@ def set_seed(seed):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+def stop(patience, best_loss, current_loss, counter):
+    """
+    Early stopping utility.
+    
+    Args:
+        patience (int): The number of epochs to wait before stopping.
+        best_loss (float): The best loss observed so far.
+        current_loss (float): The current loss.
+        counter (int): The counter for early stopping.
+    
+    Returns:
+        bool: Whether to stop training.
+        int: Updated counter.
+        float: Updated best loss.
+    """
+    if current_loss < best_loss:
+        best_loss = current_loss
+        counter = 0
+    else:
+        counter += 1
+    stop = counter >= patience
+    return stop, counter, best_loss
