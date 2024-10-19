@@ -6,7 +6,7 @@ import logging
 import sys
 import numpy as np
 
-from src.layers import BinarizeLayer, UnionLayer, LinearRegressionLayer as LRLayer
+from src.layers import *
 
 TEST_CNT_MOD = 500
 
@@ -33,10 +33,10 @@ class Net(nn.Module):
                 num += skip_from_layer.output_dim
 
             if i == 1:
-                layer = BinarizeLayer(dim_list[i], num, self.use_not, self.left, self.right)
+                layer = FeatureBinarizer(dim_list[i], num, self.use_not, self.left, self.right)
                 layer_name = f'binary{i}'
             elif i == len(dim_list) - 1:
-                layer = LRLayer(dim_list[i], num)
+                layer = LinearRegressionLayer(dim_list[i], num)
                 layer_name = f'lr{i}'
             else:
                 layer_use_not = i != 2
