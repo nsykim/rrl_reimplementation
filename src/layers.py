@@ -409,11 +409,11 @@ class UnionLayer(nn.Module):
         self.layer_type = 'union'
         
         if use_novel_activation:
-            self.conjunction_layer = ConjunctionLayer(num_conjunctions=self.num_units, input_dim=self.input_dim, use_negation=self.use_negation, alpha=alpha, beta=beta, gamma=gamma, stochastic_grad=estimated_grad)
-            self.disjunction_layer = DisjunctionLayer(num_disjunctions=self.num_units, input_dim=self.input_dim, use_negation=self.use_negation, alpha=alpha, beta=beta, gamma=gamma, stochastic_grad=estimated_grad)
+            self.conjunction_layer = ConjunctionLayer(num_conjunctions=num_units, input_dim=input_dim, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma, stochastic_grad=estimated_grad)
+            self.disjunction_layer = DisjunctionLayer(num_disjunctions=num_units, input_dim=input_dim, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma, stochastic_grad=estimated_grad)
         else:
-            self.disjunction_layer = OriginalConjunctionLayer(n=self.num_units, input_dim=self.input_dim, use_negation=self.use_negation, stochastic_grad=estimated_grad)
-            self.disjunction_layer = OriginalDisjunctionLayer(n=self.num_units, input_dim=self.input_dim, use_negation=self.use_negation, stochastic_grad=estimated_grad)
+            self.disjunction_layer = OriginalConjunctionLayer(n=num_units, input_dim=input_dim, use_negation=use_negation, stochastic_grad=estimated_grad)
+            self.disjunction_layer = OriginalDisjunctionLayer(n=num_units, input_dim=input_dim, use_negation=use_negation, stochastic_grad=estimated_grad)
 
     def forward(self, input_tensor):
         conjunction_output = self.conjunction_layer(input_tensor)
