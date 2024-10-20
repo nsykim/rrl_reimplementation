@@ -40,11 +40,11 @@ class Net(nn.Module):
                 layer_name = f'lr{i}'
             else:
                 layer_use_not = i != 2
-                layer = UnionLayer(dim_list[i], num, use_nlaf=use_nlaf, estimated_grad=estimated_grad, use_not=layer_use_not, alpha=alpha, beta=beta, gamma=gamma)
+                layer = UnionLayer(dim_list[i], num, use_novel_activation=use_nlaf, estimated_grad=estimated_grad, use_negation=layer_use_not, alpha=alpha, beta=beta, gamma=gamma)
                 layer_name = f'union{i}'
 
             self._set_layer_connections(layer, skip_from_layer)
-            prev_layer_dim = layer.output_dim
+            prev_layer_dim = layer.output_size
             self.add_module(layer_name, layer)
             self.layer_list.append(layer)
 
