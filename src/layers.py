@@ -410,7 +410,7 @@ class UnionLayer(nn.Module):
         
         if use_novel_activation:
             self.conjunction_layer = ConjunctionLayer(num_conjunctions=self.num_units, input_dim=self.input_dim, use_negation=self.use_negation, alpha=alpha, beta=beta, gamma=gamma, stochastic_grad=estimated_grad)
-            self.disjunction_layer = DisjunctionLayer(num_conjunctions=self.num_units, input_dim=self.input_dim, use_negation=self.use_negation, alpha=alpha, beta=beta, gamma=gamma, stochastic_grad=estimated_grad)
+            self.disjunction_layer = DisjunctionLayer(num_disjunctions=self.num_units, input_dim=self.input_dim, use_negation=self.use_negation, alpha=alpha, beta=beta, gamma=gamma, stochastic_grad=estimated_grad)
         else:
             self.disjunction_layer = OriginalConjunctionLayer(n=self.num_units, input_dim=self.input_dim, use_negation=self.use_negation, stochastic_grad=estimated_grad)
             self.disjunction_layer = OriginalDisjunctionLayer(n=self.num_units, input_dim=self.input_dim, use_negation=self.use_negation, stochastic_grad=estimated_grad)
