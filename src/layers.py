@@ -409,21 +409,18 @@ class UnionLayer(nn.Module):
         self.layer_type = 'union'
         
         if use_novel_activation:
-            self.conjunction_layer = ConjunctionLayer(num_conjunctions=num_units, input_dim=input_dim, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma, stochastic_grad=estimated_grad)
-            self.disjunction_layer = DisjunctionLayer(num_disjunctions=num_units, input_dim=input_dim, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma, stochastic_grad=estimated_grad)
+            self.conjunction_layer = ConjunctionLayer(num_conjunctions=num_units, input_dim=input_dim, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma)
+            self.disjunction_layer = DisjunctionLayer(num_disjunctions=num_units, input_dim=input_dim, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma)
         else:
             self.disjunction_layer = OriginalConjunctionLayer(n=num_units, input_dim=input_dim, use_negation=use_negation, stochastic_grad=estimated_grad)
             self.disjunction_layer = OriginalDisjunctionLayer(n=num_units, input_dim=input_dim, use_negation=use_negation, stochastic_grad=estimated_grad)
 
     def forward(self, input_tensor):
-        conjunction_output = self.conjunction_layer(input_tensor)
-        disjunction_output = self.disjunction_layer(input_tensor)
-        return GradientGraft.apply(conjunction_output, disjunction_output)
+        return torch.cat([self.conjunction_layer(input_tensor), self.disjunction_layer(input_tensor)], dim=1)
 
     def binarized_forward(self, input_tensor):
-        conjunction_output = self.conjunction_layer.binarized_logic(input_tensor)
-        disjunction_output = self.disjunction_layer.binarized_logic(input_tensor)
-        return torch.cat([conjunction_output, disjunction_output], dim=1)
+        return torch.cat([self.conjunction_layer.binarized_logic(input_tensor), 
+                          self.disjunction_layer.binarized_logic(input_tensor)], dim=1)
 
     def edge_count(self):
         return self._sum_binarized_weights(self.conjunction_layer) + self._sum_binarized_weights(self.disjunction_layer)
