@@ -62,6 +62,7 @@ def preprocess_data(data, numerical_features, categorical_features, target_featu
     
     if target_feature:
         target_data = data[target_feature]
+        target_data = encode_labels(target_data)
         return preprocessed_data, target_data
     return preprocessed_data
 
