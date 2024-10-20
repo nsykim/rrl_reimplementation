@@ -240,7 +240,7 @@ class DisjunctionLayer(nn.Module):
         binarized_output = self.binarized_disjunction(inputs)
         return GradientGraft.apply(binarized_output, continuous_output)
 
-    def continuous_disjunction(self, inputs):
+    def continuous_logic(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
 
         input_transform = torch.sigmoid(inputs * self.alpha)
@@ -250,7 +250,7 @@ class DisjunctionLayer(nn.Module):
         return result
 
     @torch.no_grad()
-    def binarized_disjunction(self, inputs):
+    def binarized_logic(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
 
         binary_weights = Binarize.apply(self.weights - THRESHOLD)
@@ -277,12 +277,12 @@ class OriginalConjunctionLayer(nn.Module):
         binarized_output = self.binarized_forward(inputs)
         return GradientGraft.apply(binarized_output, continuous_output)
 
-    def continuous_forward(self, x):
+    def continuous_logic(self, x):
         x = augment_with_negation(x, self.use_negation)
         return self.product_function(1 - (1 - x).unsqueeze(-1) * self.weights)
 
     @torch.no_grad()
-    def binarized_forward(self, x):
+    def binarized_logic(self, x):
         x = augment_with_negation(x, self.use_negation)
         binarized_weights = Binarize.apply(self.weights - THRESHOLD)
         return torch.prod(1 - (1 - x).unsqueeze(-1) * binarized_weights, dim=1)
@@ -307,12 +307,12 @@ class OriginalDisjunctionLayer(nn.Module):
         binarized_output = self.binarized_forward(inputs)
         return GradientGraft.apply(binarized_output, continuous_output)
 
-    def continuous_forward(self, inputs):
+    def continuous_logic(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
         return 1 - self.product_function(1 - inputs)
 
     @torch.no_grad()
-    def binarized_forward(self, inputs):
+    def binarized_logic(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
         binarized_weights = (self.weights > 0.5).float()
         return 1 - torch.prod(1 - inputs * binarized_weights, dim=1)
@@ -421,8 +421,8 @@ class UnionLayer(nn.Module):
         return GradientGraft.apply(conjunction_output, disjunction_output)
 
     def binarized_forward(self, input_tensor):
-        conjunction_output = self.conjunction_layer.binarized_forward(input_tensor)
-        disjunction_output = self.disjunction_layer.binarized_forward(input_tensor)
+        conjunction_output = self.conjunction_layer.binarized_logic(input_tensor)
+        disjunction_output = self.disjunction_layer.binarized_logic(input_tensor)
         return torch.cat([conjunction_output, disjunction_output], dim=1)
 
     def edge_count(self):
