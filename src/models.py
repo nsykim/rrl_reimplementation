@@ -30,7 +30,7 @@ class Net(nn.Module):
             skip_from_layer = None
             if self.use_skip and i >= 4:
                 skip_from_layer = self.layer_list[-2]
-                num += skip_from_layer.output_dim
+                num += skip_from_layer.output_size
 
             if i == 1:
                 layer = FeatureBinarizer(dim_list[i], num, self.use_not, self.left, self.right)
@@ -287,7 +287,7 @@ class RRL:
     def detect_dead_node(self, data_loader=None):
         with torch.no_grad():
             for layer in self.net.layer_list[:-1]:
-                layer.node_activation_cnt = torch.zeros(layer.output_dim, dtype=torch.double, device=self.device_id)
+                layer.node_activation_cnt = torch.zeros(layer.output_size, dtype=torch.double, device=self.device_id)
                 layer.forward_tot = 0
 
             for x, y in data_loader:
