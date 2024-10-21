@@ -44,7 +44,7 @@ class Net(nn.Module):
                 layer_name = f'union{i}'
 
             self._set_layer_connections(layer, skip_from_layer)
-            prev_layer_dim = layer.output_size
+            prev_layer_dim = layer.output_dim
             self.add_module(layer_name, layer)
             self.layer_list.append(layer)
 

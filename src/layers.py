@@ -51,8 +51,8 @@ class FeatureBinarizer(nn.Module):
         self.use_negation = use_negation
         self.discrete_feature_count = input_shape[0] * (2 if use_negation else 1)
         self.continuous_feature_count = input_shape[1]
-        self.output_size = self.discrete_feature_count + 2 * num_bins * self.continuous_feature_count
-        self.feature_mapping = {i: i for i in range(self.output_size)}
+        self.output_dim = self.discrete_feature_count + 2 * num_bins * self.continuous_feature_count
+        self.feature_mapping = {i: i for i in range(self.output_dim)}
 
         self.min_val = nn.Parameter(min_val, requires_grad=False) if min_val is not None else None
         self.max_val = nn.Parameter(max_val, requires_grad=False) if max_val is not None else None
