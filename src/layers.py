@@ -189,7 +189,6 @@ class ConjunctionLayer(nn.Module):
         self.layer_type = 'logical_conjunction'
 
         self.weights = nn.Parameter(0.5 * torch.rand(self.input_dim, self.output_dim))
-        self.product_function = stochastic_product if stochastic_grad else standard_product
 
         self.alpha = alpha
         self.beta = beta
