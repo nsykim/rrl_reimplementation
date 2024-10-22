@@ -186,6 +186,7 @@ class RRL:
                 y = y.cuda(self.device_id, non_blocking=True)
                 optimizer.zero_grad()
                 
+                print(f"X: {X.shape}, y: {y.shape}")
                 y_bar = self.net.forward(X) / torch.exp(self.net.t)
                 y_arg = torch.argmax(y, dim=1)
                 
