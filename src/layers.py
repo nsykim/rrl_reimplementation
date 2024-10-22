@@ -198,11 +198,11 @@ class ConjunctionLayer(nn.Module):
 
     def forward(self, inputs):
         print(f"ConjunctionLayer - forward - inputs shape: {inputs.shape}")
-        continuous_output = self.continuous_logic(inputs)
-        binarized_output = self.binarized_logic(inputs)
+        continuous_output = self.continuous_forward(inputs)
+        binarized_output = self.binarized_forward(inputs)
         return GradientGraft.apply(binarized_output, continuous_output)
 
-    def continuous_logic(self, inputs):
+    def continuous_forward(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
 
         inputs = 1.- inputs
@@ -211,7 +211,7 @@ class ConjunctionLayer(nn.Module):
         return 1. / (1. + x1 @ w1) ** self.gamma
 
     @torch.no_grad()
-    def binarized_logic(self, inputs):
+    def binarized_forward(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
         print(f"ConjunctionLayer - binarized_logic - inputs after negation: {inputs.shape}")
 
@@ -241,18 +241,18 @@ class DisjunctionLayer(nn.Module):
         self.gamma = gamma
 
     def forward(self, inputs):
-        continuous_output = self.continuous_disjunction(inputs)
-        binarized_output = self.binarized_disjunction(inputs)
+        continuous_output = self.continuous_forward(inputs)
+        binarized_output = self.binarized_forward(inputs)
         return GradientGraft.apply(binarized_output, continuous_output)
 
-    def continuous_logic(self, inputs):
+    def continuous_forward(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
         x1 = (1. - 1. / (1. - (inputs * self.alpha) ** self.beta))
         w1 = (1. - 1. / (1. - (self.weights * self.alpha) ** self.beta))
         return 1. / (1. + x1 @ w1) ** self.gamma
 
     @torch.no_grad()
-    def binarized_logic(self, inputs):
+    def binarized_forward(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
 
         binary_weights = Binarize.apply(self.weights - THRESHOLD)
@@ -279,12 +279,12 @@ class OriginalConjunctionLayer(nn.Module):
         binarized_output = self.binarized_forward(inputs)
         return GradientGraft.apply(binarized_output, continuous_output)
 
-    def continuous_logic(self, x):
+    def continuous_forward(self, x):
         x = augment_with_negation(x, self.use_negation)
         return self.product_function(1 - (1 - x).unsqueeze(-1) * self.weights)
 
     @torch.no_grad()
-    def binarized_logic(self, x):
+    def binarized_forward(self, x):
         x = augment_with_negation(x, self.use_negation)
         binarized_weights = Binarize.apply(self.weights - THRESHOLD)
         return torch.prod(1 - (1 - x).unsqueeze(-1) * binarized_weights, dim=1)
@@ -309,12 +309,12 @@ class OriginalDisjunctionLayer(nn.Module):
         binarized_output = self.binarized_forward(inputs)
         return GradientGraft.apply(binarized_output, continuous_output)
 
-    def continuous_logic(self, inputs):
+    def continuous_foward(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
         return 1 - self.product_function(1 - inputs)
 
     @torch.no_grad()
-    def binarized_logic(self, inputs):
+    def binarized_forward(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
         binarized_weights = (self.weights > 0.5).float()
         return 1 - torch.prod(1 - inputs * binarized_weights, dim=1)
