@@ -197,6 +197,7 @@ class ConjunctionLayer(nn.Module):
         self.gamma = gamma
 
     def forward(self, inputs):
+        print(f"ConjunctionLayer - forward - inputs shape: {inputs.shape}")
         continuous_output = self.continuous_logic(inputs)
         binarized_output = self.binarized_logic(inputs)
         return GradientGraft.apply(binarized_output, continuous_output)
@@ -409,6 +410,7 @@ class UnionLayer(nn.Module):
         self.output_dim = self.num_units * 2  # Union of conjunction and disjunction
         self.layer_type = 'union'
         
+        print(f"UnionLayer - num_units: {num_units}, input_dim: {input_dim}, use_negation: {use_negation}, use_novel_activation: {use_novel_activation}, estimated_grad: {estimated_grad}, alpha: {alpha}, beta: {beta}, gamma: {gamma}")
         if use_novel_activation:
             self.conjunction_layer = ConjunctionLayer(num_conjunctions=num_units, input_dim=input_dim, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma)
             self.disjunction_layer = DisjunctionLayer(num_disjunctions=num_units, input_dim=input_dim, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma)
