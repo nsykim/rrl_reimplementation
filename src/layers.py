@@ -212,9 +212,12 @@ class ConjunctionLayer(nn.Module):
     @torch.no_grad()
     def binarized_logic(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
+        print(f"ConjunctionLayer - binarized_logic - inputs after negation: {inputs.shape}")
 
         binary_weights = Binarize.apply(self.weights - THRESHOLD)
+        print(f"ConjunctionLayer - binarized_logic - binary_weights shape: {binary_weights.shape}")
         res = (1 - inputs) @ binary_weights
+        print(f"ConjunctionLayer - binarized_logic - res shape: {res.shape}")
         return torch.where(res > 0, torch.zero_like(res), torch.ones_like(res))  
 
     def clip_weights(self):
