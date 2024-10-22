@@ -85,7 +85,7 @@ class FeatureBinarizer(nn.Module):
     def discretize(self, input_data):
         return self.forward(input_data)
 
-    def enforce_bounds(self):
+    def clip_weights(self):
         if self.continuous_feature_count > 0 and self.min_val is not None and self.max_val is not None:
             self.bin_centers.data = torch.clamp(self.bin_centers.data, self.min_val, self.max_val)
 
@@ -130,7 +130,7 @@ class LinearRegressionLayer(nn.Module):
     def binarized_forward(self, inputs):
         return self.forward(inputs)
 
-    def clip_weights(self):
+    def clip(self):
         for param in self.linear.parameters():
             param.data.clamp_(-1.0, 1.0)
 
