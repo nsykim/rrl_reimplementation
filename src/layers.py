@@ -204,8 +204,8 @@ class ConjunctionLayer(nn.Module):
     def continuous_logic(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
 
-        x = 1.- x
-        x1 = (1. - 1. / (1. - (x * self.alpha) ** self.beta))
+        inputs = 1.- inputs
+        x1 = (1. - 1. / (1. - (inputs * self.alpha) ** self.beta))
         w1 = (1. - 1. / (1. - (self.weights * self.alpha) ** self.beta))
         return 1. / (1. + x1 @ w1) ** self.gamma
 
@@ -229,7 +229,7 @@ class DisjunctionLayer(nn.Module):
         self.output_dim = num_disjunctions
         self.layer_type = 'disjunction'
 
-        self.weights = nn.Parameter(0.5 * torch.rand(self.input_dim, self.num_disjunctions))
+        self.weights = nn.Parameter(INIT_L + (0.5 - INIT_L) * torch.rand(self.input_dim, self.num_disjunctions))
         self.product_function = stochastic_product if stochastic_grad else standard_product
 
         self.alpha = alpha
@@ -243,20 +243,17 @@ class DisjunctionLayer(nn.Module):
 
     def continuous_logic(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
-
-        input_transform = torch.sigmoid(inputs * self.alpha)
-        weight_transform = torch.sigmoid(self.weights * self.alpha)
-        result = torch.pow(1.0 / (1.0 + torch.matmul(input_transform, weight_transform)), self.gamma)
-
-        return result
+        x1 = (1. - 1. / (1. - (inputs * self.alpha) ** self.beta))
+        w1 = (1. - 1. / (1. - (self.weights * self.alpha) ** self.beta))
+        return 1. / (1. + x1 @ w1) ** self.gamma
 
     @torch.no_grad()
     def binarized_logic(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
 
         binary_weights = Binarize.apply(self.weights - THRESHOLD)
-        result = torch.matmul(inputs, binary_weights)
-        return torch.where(result > 0, torch.ones_like(result), torch.zeros_like(result))
+        res = inputs @ self.binary_weights
+        return torch.where(res > 0, torch.ones_like(res), torch.zeros_like(res))
 
     def clip_weights(self):
         self.weights.data.clamp_(INIT_L, 1.0)
