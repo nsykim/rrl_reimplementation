@@ -57,13 +57,17 @@ class Net(nn.Module):
             skip_from_layer.conn.is_skip_to_layer = True
 
     def forward(self, x):
+        print(f"X: {x.shape}")
         for layer in self.layer_list:
             if layer.conn.skip_from_layer is not None:
                 x = torch.cat((x, layer.conn.skip_from_layer.x_res), dim=1)
+                print(f"layer is in conn.skip_fron_layer idk X: {x.shape}")
                 del layer.conn.skip_from_layer.x_res
             x = layer(x)
+            print(f"X after layer: {x.shape}")
             if layer.conn.is_skip_to_layer:
                 layer.x_res = x
+        print(f"X after all layers: {x.shape}")
         return x
     
     def binarized_forward(self, x, count=False):
@@ -207,6 +211,8 @@ class RRL:
                 print(f"X: {X.shape}, y: {y.shape}")
                 y_bar = self.net.forward(X) / torch.exp(self.net.t)
                 y_arg = torch.argmax(y, dim=1)
+                print(f"y_bar: {y_bar.shape} with value: {y_bar}")
+                print(f"y_arg: {y_arg.shape} with value: {y_arg}")
                 
                 loss_rrl = criterion(y_bar, y_arg) + weight_decay * self.l2_penalty()
                 
