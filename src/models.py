@@ -24,6 +24,7 @@ class Net(nn.Module):
         self._initialize_layers(dim_list, use_nlaf, estimated_grad, alpha, beta, gamma)
 
     def _initialize_layers(self, dim_list, use_nlaf, estimated_grad, alpha, beta, gamma):
+        print(f"dim_list: {dim_list}")
         prev_layer_dim = dim_list[0]
         for i in range(1, len(dim_list)):
             num = prev_layer_dim
