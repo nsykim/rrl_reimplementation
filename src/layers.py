@@ -256,7 +256,7 @@ class DisjunctionLayer(nn.Module):
         inputs = augment_with_negation(inputs, self.use_negation)
 
         binary_weights = Binarize.apply(self.weights - THRESHOLD)
-        res = inputs @ self.binary_weights
+        res = inputs @ binary_weights
         return torch.where(res > 0, torch.ones_like(res), torch.zeros_like(res))
 
     def clip_weights(self):
