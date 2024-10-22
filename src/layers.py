@@ -109,30 +109,27 @@ class FeatureBinarizer(nn.Module):
         return feature_labels
 
 class LinearRegressionLayer(nn.Module):
-    def __init__(self, num_outputs, input_dim, use_negation=False, stochastic_grad=False):
+    def __init__(self, num_outputs, input_dim):
         super(LinearRegressionLayer, self).__init__()
         self.num_outputs = num_outputs
-        self.use_negation = use_negation
-        self.input_dim = input_dim * (2 if use_negation else 1)
+        self.input_dim = input_dim
         self.output_dim = num_outputs
+        self.rid2dim = None
+        self.rule2weights = None
         self.layer_type = 'linear_regression'
         
-        # Linear transformation layer
         self.linear = nn.Linear(self.input_dim, self.output_dim)
-        self.product_function = stochastic_product if stochastic_grad else standard_product
 
     def forward(self, inputs):
-        inputs = augment_with_negation(inputs, self.use_negation)
         return self.linear(inputs)
 
     @torch.no_grad()
     def binarized_forward(self, inputs):
         return self.forward(inputs)
 
-    def enforce_weight_clipping(self, lower_bound=-1.0, upper_bound=1.0):
-        with torch.no_grad():
-            for param in self.linear.parameters():
-                param.data.clamp_(lower_bound, upper_bound)
+    def clip(self):
+        for param in self.linear.parameters():
+            param.data.clamp_(-1.0, 1.0)
 
     def compute_l1_norm(self):
         return torch.norm(self.linear.weight, p=1)
@@ -140,44 +137,36 @@ class LinearRegressionLayer(nn.Module):
     def compute_l2_norm(self):
         return torch.sum(self.linear.weight ** 2)
     
-    def calculate_rule_weights(self, previous_layer, skip_connection_layer=None):
-        prev_activation_count = previous_layer.node_activation_count
-        prev_forward_count = previous_layer.forward_total
-        always_active_pos = prev_activation_count == prev_forward_count
-        
-        prev_dim_map = {idx: (-1, dim) for idx, dim in previous_layer.node_to_rule_map.items()}
-        
-        if skip_connection_layer is not None:
-            skip_shifted_dim_map = {(idx + previous_layer.output_dim): (-2, dim)
-                                    for idx, dim in skip_connection_layer.node_to_rule_map.items()}
-            merged_dim_map = {**skip_shifted_dim_map, **prev_dim_map}
-            always_active_pos = torch.cat(
-                [always_active_pos, 
-                 skip_connection_layer.node_activation_count == skip_connection_layer.forward_total]
-            )
-        else:
-            merged_dim_map = prev_dim_map
-        
-        weight_matrix, bias_vector = self.linear.weight.detach(), self.linear.bias.detach()
-        bias_vector = torch.sum(weight_matrix.T[always_active_pos], dim=0) + bias_vector
-        weight_matrix = weight_matrix.cpu().numpy()
-        self.bias_vector = bias_vector.cpu().numpy()
+    def calculate_rule_weights(self, prev_layer, skip_connect_layer):
+        prev_layer = self.conn.prev_layer
+        skip_connect_layer = self.conn.skip_from_layer
 
-        rule_weight_map = defaultdict(lambda: defaultdict(float))
-        rule_to_dim_map = {}
+        always_act_pos = (prev_layer.node_activation_cnt == prev_layer.forward_tot)
+        merged_dim2id = prev_dim2id = {k: (-1, v) for k, v in prev_layer.dim2id.items()}
+        if skip_connect_layer is not None:
+            shifted_dim2id = {(k + prev_layer.output_dim): (-2, v) for k, v in skip_connect_layer.dim2id.items()}
+            merged_dim2id = defaultdict(lambda: -1, {**shifted_dim2id, **prev_dim2id})
+            always_act_pos = torch.cat(
+                [always_act_pos, (skip_connect_layer.node_activation_cnt == skip_connect_layer.forward_tot)])
+        
+        Wl, bl = list(self.fc1.parameters())
+        bl = torch.sum(Wl.T[always_act_pos], dim=0) + bl
+        Wl = Wl.cpu().detach().numpy()
+        self.bl = bl.cpu().detach().numpy()
 
-        for label_idx, weights in enumerate(weight_matrix):
-            for dim_idx, weight_value in enumerate(weights):
-                rule_id = merged_dim_map.get(dim_idx, (-1, -1))
-                if rule_id[1] == -1:
+        marked = defaultdict(lambda: defaultdict(float))
+        rid2dim = {}
+        for label_id, wl in enumerate(Wl):
+            for i, w in enumerate(wl):
+                rid = merged_dim2id[i]
+                if rid == -1 or rid[1] == -1:
                     continue
-                rule_weight_map[rule_id][label_idx] += weight_value
-                rule_to_dim_map[rule_id] = dim_idx % previous_layer.output_dim
-        
-        self.rule_to_dim_map = rule_to_dim_map
-        self.rule_to_weight_map = sorted(
-            rule_weight_map.items(), key=lambda x: max(map(abs, x[1].values())), reverse=True
-        )
+                marked[rid][label_id] += w
+                rid2dim[rid] = i % prev_layer.output_dim
+
+        self.rid2dim = rid2dim
+        self.rule2weights = sorted(marked.items(), key=lambda x: max(map(abs, x[1].values())), reverse=True)
+
 
 class ConjunctionLayer(nn.Module):
     def __init__(self, num_conjunctions, input_dim, use_negation=False, alpha=0.999, beta=8, gamma=1, stochastic_grad=False):
