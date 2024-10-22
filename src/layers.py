@@ -49,11 +49,11 @@ class FeatureBinarizer(nn.Module):
         self.num_bins = num_bins
         self.input_shape = input_shape
         self.use_negation = use_negation
-        self.discrete_feature_count = input_shape[0] * (2 if use_negation else 1)
+        self.discrete_feature_count = input_shape[0]
         self.continuous_feature_count = input_shape[1]
         self.output_dim = self.discrete_feature_count + 2 * num_bins * self.continuous_feature_count
         self.feature_mapping = {i: i for i in range(self.output_dim)}
-
+        self.discrete_feature_count *= 2 if use_negation else 1
         self.min_val = nn.Parameter(min_val, requires_grad=False) if min_val is not None else None
         self.max_val = nn.Parameter(max_val, requires_grad=False) if max_val is not None else None
 
@@ -212,8 +212,8 @@ class ConjunctionLayer(nn.Module):
         inputs = augment_with_negation(inputs, self.use_negation)
 
         binary_weights = Binarize.apply(self.weights - THRESHOLD)
-        return torch.where(torch.matmul(1 - inputs, binary_weights) > 0,
-                           torch.zeros_like(inputs), torch.ones_like(inputs))
+        res = (1 - inputs) @ binary_weights
+        return torch.where(res > 0, torch.zero_like(res), torch.ones_like(res))  
 
     def clip_weights(self):
         self.weights.data.clamp_(INIT_L, 1.0)

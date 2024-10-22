@@ -33,7 +33,7 @@ class Net(nn.Module):
                 num += skip_from_layer.output_size
 
             if i == 1:
-                layer = FeatureBinarizer(dim_list[i], num, self.use_not, self.left, self.right)
+                layer = FeatureBinarizer(dim_list[i], num, use_negation=self.use_not, min_val=self.left, max_val=self.right)
                 layer_name = f'binary{i}'
             elif i == len(dim_list) - 1:
                 layer = LinearRegressionLayer(dim_list[i], num)
