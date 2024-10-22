@@ -63,7 +63,7 @@ class Net(nn.Module):
                 x = torch.cat((x, layer.conn.skip_from_layer.x_res), dim=1)
                 print(f"layer is in conn.skip_fron_layer idk X: {x.shape}")
                 del layer.conn.skip_from_layer.x_res
-            x = layer(x)
+            x = layer(x) # calls the forward method of the layer
             print(f"X after layer {layer}: {x.shape}")
             if layer.conn.is_skip_to_layer:
                 layer.x_res = x

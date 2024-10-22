@@ -121,7 +121,10 @@ class LinearRegressionLayer(nn.Module):
         self.linear = nn.Linear(self.input_dim, self.output_dim)
 
     def forward(self, inputs):
-        return self.linear(inputs)
+        print(f"LinearRegressionLayer - forward - inputs shape: {inputs.shape}")
+        x = self.linear(inputs)
+        print(f"LinearRegressionLayer - forward - inpuuts shape: {x.shape}")
+        return x
 
     @torch.no_grad()
     def binarized_forward(self, inputs):
