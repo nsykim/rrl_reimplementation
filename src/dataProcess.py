@@ -1,117 +1,104 @@
-import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, StratifiedKFold
-from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
+import pandas as pd
+from sklearn import preprocessing
+from sklearn.impute import SimpleImputer
 
-def load_data(file_path, column_names=None):
-    """
-    Load data from a CSV file.
-    
-    Args:
-        file_path (str): Path to the CSV file.
-        column_names (list, optional): List of column names. If None, infer from the file.
-    
-    Returns:
-        pd.DataFrame: Loaded data.
-    """
-    data = pd.read_csv(file_path, header=None, names=column_names)
-    return data
 
-def preprocess_data(data, numerical_features, categorical_features, target_feature=None, augment=False, augmentation_factor=0.1):
-    """
-    Preprocess the data using scikit-learn's preprocessing utilities.
-    
-    Args:
-        data (pd.DataFrame): Raw data.
-        numerical_features (list): List of numerical feature names.
-        categorical_features (list): List of categorical feature names.
-        target_feature (str): Name of the target feature (optional).
-        augment (bool): Whether to apply data augmentation.
-        augmentation_factor (float): The factor by which to augment the data.
-    
-    Returns:
-        np.ndarray: Preprocessed data.
-        np.ndarray: Target data (if target_feature is provided).
-    """
-    # Define the preprocessing for numerical features
-    numerical_transformer = Pipeline(steps=[
-        ('scaler', StandardScaler())
-    ])
-    
-    # Define the preprocessing for categorical features
-    categorical_transformer = Pipeline(steps=[
-        ('onehot', OneHotEncoder(handle_unknown='ignore', sparse_output=False))
-    ])
-    
-    # Combine preprocessing steps
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ('num', numerical_transformer, numerical_features),
-            ('cat', categorical_transformer, categorical_features)
-        ]
-    )
-    
-    # Fit and transform the data
-    features = data.drop(columns=[target_feature]) if target_feature else data
-    preprocessed_data = preprocessor.fit_transform(features)
-    
-    if augment:
-        preprocessed_data = augment_data(preprocessed_data, augmentation_factor)
-    
-    if target_feature:
-        target_data = data[target_feature]
-        target_data = encode_labels(target_data)
-        return preprocessed_data, target_data
-    return preprocessed_data
+def read_info(info_path):
+    with open(info_path) as f:
+        f_list = []
+        for line in f:
+            tokens = line.strip().split()
+            f_list.append(tokens)
+    return f_list[:-1], int(f_list[-1][-1])
 
-def augment_data(data, augmentation_factor=0.1):
-    """
-    Augment the dataset by adding noise to numerical features.
-    
-    Args:
-        data (np.ndarray): The dataset.
-        augmentation_factor (float): The factor by which to augment the data.
-    
-    Returns:
-        np.ndarray: The augmented dataset.
-    """
-    noise = np.random.normal(0, augmentation_factor, data.shape)
-    augmented_data = data + noise
-    return augmented_data
 
-def get_data_splits(data, target=None, test_size=0.2, stratify=False):
-    """
-    Split the data into training and testing sets.
-    
-    Args:
-        data (np.ndarray): Preprocessed data.
-        target (np.ndarray): Target data (optional).
-        test_size (float): Proportion of the dataset to include in the test split.
-        stratify (bool): Whether to stratify the split based on the target.
-    
-    Returns:
-        tuple: Training and testing data.
-    """
-    if stratify and target is not None:
-        train_data, test_data, train_target, test_target = train_test_split(
-            data, target, test_size=test_size, stratify=target)
-        return (train_data, train_target), (test_data, test_target)
-    else:
-        train_data, test_data = train_test_split(data, test_size=test_size)
-        return train_data, test_data
+def read_csv(data_path, info_path, shuffle=False):
+    D = pd.read_csv(data_path, header=None)
+    if shuffle:
+        D = D.sample(frac=1, random_state=0).reset_index(drop=True)
+    f_list, label_pos = read_info(info_path)
+    f_df = pd.DataFrame(f_list)
+    D.columns = f_df.iloc[:, 0]
+    y_df = D.iloc[:, [label_pos]]
+    X_df = D.drop(D.columns[label_pos], axis=1)
+    f_df = f_df.drop(f_df.index[label_pos])
+    return X_df, y_df, f_df, label_pos
 
-def encode_labels(labels):
-    """
-    Encode labels using LabelEncoder.
-    
-    Args:
-        labels (pd.Series): Labels to encode.
-    
-    Returns:
-        np.ndarray: Encoded labels.
-    """
-    encoder = LabelEncoder()
-    encoded_labels = encoder.fit_transform(labels)
-    return encoded_labels
+
+class DBEncoder:
+    """Encoder used for data discretization and binarization."""
+
+    def __init__(self, f_df, discrete=False, y_one_hot=True, drop='first'):
+        self.f_df = f_df
+        self.discrete = discrete
+        self.y_one_hot = y_one_hot
+        self.label_enc = preprocessing.OneHotEncoder(categories='auto') if y_one_hot else preprocessing.LabelEncoder()
+        self.feature_enc = preprocessing.OneHotEncoder(categories='auto', drop=drop)
+        self.imp = SimpleImputer(missing_values=np.nan, strategy='mean')
+        self.X_fname = None
+        self.y_fname = None
+        self.discrete_flen = None
+        self.continuous_flen = None
+        self.mean = None
+        self.std = None
+
+    def split_data(self, X_df):
+        discrete_data = X_df[self.f_df.loc[self.f_df[1] == 'discrete', 0]]
+        continuous_data = X_df[self.f_df.loc[self.f_df[1] == 'continuous', 0]]
+        if not continuous_data.empty:
+            continuous_data = continuous_data.replace(to_replace=r'.*\?.*', value=np.nan, regex=True)
+            continuous_data = continuous_data.astype(np.float)
+        return discrete_data, continuous_data
+
+    def fit(self, X_df, y_df):
+        X_df = X_df.reset_index(drop=True)
+        y_df = y_df.reset_index(drop=True)
+        discrete_data, continuous_data = self.split_data(X_df)
+        self.label_enc.fit(y_df)
+        self.y_fname = list(self.label_enc.get_feature_names_out(y_df.columns)) if self.y_one_hot else y_df.columns
+
+        if not continuous_data.empty:
+            # Use mean as missing value for continuous columns if do not discretize them.
+            self.imp.fit(continuous_data.values)
+        if not discrete_data.empty:
+            # One-hot encoding
+            self.feature_enc.fit(discrete_data)
+            feature_names = discrete_data.columns
+            self.X_fname = list(self.feature_enc.get_feature_names_out(feature_names))
+            self.discrete_flen = len(self.X_fname)
+            if not self.discrete:
+                self.X_fname.extend(continuous_data.columns)
+        else:
+            self.X_fname = continuous_data.columns
+            self.discrete_flen = 0
+        self.continuous_flen = continuous_data.shape[1]
+
+    def transform(self, X_df, y_df, normalized=False, keep_stat=False):
+        X_df = X_df.reset_index(drop=True)
+        y_df = y_df.reset_index(drop=True)
+        discrete_data, continuous_data = self.split_data(X_df)
+        # Encode string value to int index.
+        y = self.label_enc.transform(y_df.values.reshape(-1, 1))
+        if self.y_one_hot:
+            y = y.toarray()
+
+        if not continuous_data.empty:
+            # Use mean as missing value for continuous columns if we do not discretize them.
+            continuous_data = pd.DataFrame(self.imp.transform(continuous_data.values),
+                                           columns=continuous_data.columns)
+            if normalized:
+                if keep_stat:
+                    self.mean = continuous_data.mean()
+                    self.std = continuous_data.std()
+                continuous_data = (continuous_data - self.mean) / self.std
+        if not discrete_data.empty:
+            # One-hot encoding
+            discrete_data = self.feature_enc.transform(discrete_data)
+            if not self.discrete:
+                X_df = pd.concat([pd.DataFrame(discrete_data.toarray()), continuous_data], axis=1)
+            else:
+                X_df = pd.DataFrame(discrete_data.toarray())
+        else:
+            X_df = continuous_data
+        return X_df.values, y
