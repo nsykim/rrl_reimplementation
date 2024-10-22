@@ -186,7 +186,7 @@ class ConjunctionLayer(nn.Module):
         self.use_negation = use_negation
         self.input_dim = input_dim * (2 if use_negation else 1)
         self.output_dim = num_conjunctions
-        self.layer_type = 'logical_conjunction'
+        self.layer_type = 'conjunction'
 
         self.weights = nn.Parameter(0.5 * torch.rand(self.input_dim, self.output_dim))
 
@@ -415,7 +415,7 @@ class UnionLayer(nn.Module):
             self.conjunction_layer = ConjunctionLayer(num_conjunctions=num_units, input_dim=input_dim, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma)
             self.disjunction_layer = DisjunctionLayer(num_disjunctions=num_units, input_dim=input_dim, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma)
         else:
-            self.disjunction_layer = OriginalConjunctionLayer(n=num_units, input_dim=input_dim, use_negation=use_negation, stochastic_grad=estimated_grad)
+            self.conjunction_layer = OriginalConjunctionLayer(n=num_units, input_dim=input_dim, use_negation=use_negation, stochastic_grad=estimated_grad)
             self.disjunction_layer = OriginalDisjunctionLayer(n=num_units, input_dim=input_dim, use_negation=use_negation, stochastic_grad=estimated_grad)
 
     def forward(self, input_tensor):
