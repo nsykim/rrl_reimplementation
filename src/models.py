@@ -64,7 +64,7 @@ class Net(nn.Module):
                 print(f"layer is in conn.skip_fron_layer idk X: {x.shape}")
                 del layer.conn.skip_from_layer.x_res
             x = layer(x)
-            print(f"X after layer: {x.shape}")
+            print(f"X after layer {layer}: {x.shape}")
             if layer.conn.is_skip_to_layer:
                 layer.x_res = x
         print(f"X after all layers: {x.shape}")
