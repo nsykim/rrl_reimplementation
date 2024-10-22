@@ -219,7 +219,7 @@ class ConjunctionLayer(nn.Module):
         print(f"ConjunctionLayer - binarized_logic - binary_weights shape: {binary_weights.shape}")
         res = (1 - inputs) @ binary_weights
         print(f"ConjunctionLayer - binarized_logic - res shape: {res.shape}")
-        return torch.where(res > 0, torch.zero_like(res), torch.ones_like(res))  
+        return torch.where(res > 0, torch.zeros_like(res), torch.ones_like(res))  
 
     def clip_weights(self):
         self.weights.data.clamp_(INIT_L, 1.0)
