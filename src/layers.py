@@ -130,7 +130,7 @@ class LinearRegressionLayer(nn.Module):
     def binarized_forward(self, inputs):
         return self.forward(inputs)
 
-    def clip(self):
+    def clip_weights(self):
         for param in self.linear.parameters():
             param.data.clamp_(-1.0, 1.0)
 
