@@ -190,6 +190,8 @@ class ConjunctionLayer(nn.Module):
 
         self.weights = nn.Parameter(0.5 * torch.rand(self.input_dim, self.output_dim))
 
+        self.activation_cnt = None
+
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
@@ -202,10 +204,10 @@ class ConjunctionLayer(nn.Module):
     def continuous_logic(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
 
-        x_transform = 1 - torch.sigmoid(inputs * self.alpha)
-        weight_transform = 1 - torch.sigmoid(self.weights * self.alpha)
-
-        return torch.pow(1.0 / (1.0 + torch.matmul(x_transform, weight_transform)), self.gamma)
+        x = 1.- x
+        x1 = (1. - 1. / (1. - (x * self.alpha) ** self.beta))
+        w1 = (1. - 1. / (1. - (self.weights * self.alpha) ** self.beta))
+        return 1. / (1. + x1 @ w1) ** self.gamma
 
     @torch.no_grad()
     def binarized_logic(self, inputs):
