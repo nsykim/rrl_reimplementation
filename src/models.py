@@ -137,18 +137,36 @@ class RRL:
             layer.clip_weights()
     
     def edge_penalty(self):
-        return sum(layer.edge_count() for layer in self.net.layer_list[1:-1])
+        edge_penalty = 0.0
+        for layer in self.net.layer_list[1:-1]:
+            edge_penalty += layer.edge_count()
+        return edge_penalty
+        # return sum(layer.edge_count() for layer in self.net.layer_list[1:-1])
+
     
     def l1_penalty(self):
-        return sum(layer.l1_norm() for layer in self.net.layer_list[1:])
+        l1_penalty = 0.0
+        for layer in self.net.layer_list[1:-1]:
+            l1_penalty += layer.l1_norm()
+        return l1_penalty
+        # return sum(layer.l1_norm() for layer in self.net.layer_list[1:])
     
     def l2_penalty(self):
-        return sum(layer.l2_norm() for layer in self.net.layer_list[1:])
+        l2_penalty = 0.0
+        for layer in self.net.layer_list[1:-1]:
+            l2_penalty += layer.l2_norm()
+        return l2_penalty
+        # return sum(layer.l2_norm() for layer in self.net.layer_list[1:])
     
     def mixed_penalty(self):
-        penalty = sum(layer.l2_norm() for layer in self.net.layer_list[1:-1])
-        penalty += self.net.layer_list[-1].l1_norm()
+        penalty = 0.0
+        for layer in self.net.layer_list[1:-1]:
+            penalty += layer.l2_norm()
+        penalty+= self.net.layer_list[-1].l1_norm()
         return penalty
+        # penalty = sum(layer.l2_norm() for layer in self.net.layer_list[1:-1])
+        # penalty += self.net.layer_list[-1].l1_norm()
+        # return penalty
 
     @staticmethod
     def exp_lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_rate=0.9, lr_decay_epoch=7):
