@@ -134,10 +134,10 @@ class LinearRegressionLayer(nn.Module):
         for param in self.linear.parameters():
             param.data.clamp_(-1.0, 1.0)
 
-    def compute_l1_norm(self):
+    def compute_compute_l1_norm(self):
         return torch.norm(self.linear.weight, p=1)
     
-    def compute_l2_norm(self):
+    def compute_compute_l2_norm(self):
         return torch.sum(self.linear.weight ** 2)
     
     def calculate_rule_weights(self, prev_layer, skip_connect_layer):
@@ -424,10 +424,10 @@ class UnionLayer(nn.Module):
         binarized_weights = Binarize.apply(layer.weights - THRESHOLD)
         return torch.sum(binarized_weights)
 
-    def l1_norm(self):
+    def compute_l1_norm(self):
         return torch.sum(self.conjunction_layer.weights) + torch.sum(self.disjunction_layer.weights)
 
-    def l2_norm(self):
+    def compute_l2_norm(self):
         return torch.sum(self.conjunction_layer.weights ** 2) + torch.sum(self.disjunction_layer.weights ** 2)
 
     def clip_weights(self):

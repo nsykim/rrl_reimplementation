@@ -146,10 +146,10 @@ class RRL:
 
     
     def l1_penalty(self):
-        return sum(layer.l1_norm() for layer in self.net.layer_list[1:])
+        return sum(layer.compute_l1_norm() for layer in self.net.layer_list[1:])
     
     def l2_penalty(self):
-        return sum(layer.l2_norm() for layer in self.net.layer_list[1:])
+        return sum(layer.compute_l2_norm() for layer in self.net.layer_list[1:])
     
     def mixed_penalty(self):
         penalty = sum(layer.l2_norm() for layer in self.net.layer_list[1:-1])
