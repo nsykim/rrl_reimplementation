@@ -85,7 +85,7 @@ class Net(nn.Module):
         return x
 
 
-class MyDistributedDataParallel(torch.nn.parallel.DistributedDataParallel):
+class DistributedDataParallel(torch.nn.parallel.DistributedDataParallel):
     @property
     def layer_list(self):
         return self.module.layer_list
@@ -134,7 +134,7 @@ class RRL:
         net = Net(dim_list, use_not=use_not, left=left, right=right, use_nlaf=use_nlaf, estimated_grad=estimated_grad, use_skip=use_skip, alpha=alpha, beta=beta, gamma=gamma, temperature=temperature)
         net.cuda(self.device_id)
         if distributed:
-            net = MyDistributedDataParallel(net, device_ids=[self.device_id])
+            net = DistributedDataParallel(net, device_ids=[self.device_id])
         return net
 
     def clip(self):
@@ -302,7 +302,7 @@ class RRL:
 
             for x, y in data_loader:
                 x_bar = x.cuda(self.device_id)
-                self.net.bi_forward(x_bar, count=True)
+                self.net.binarized_forward(x_bar, count=True)
 
     def rule_print(self, feature_name, label_name, train_loader, file=sys.stdout, mean=None, std=None, display=True):
         if self.net.layer_list[1] is None and train_loader is None:
