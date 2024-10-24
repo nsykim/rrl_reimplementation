@@ -54,6 +54,7 @@ class FeatureBinarizer(nn.Module):
         self.output_dim = self.discrete_feature_count + 2 * num_bins * self.continuous_feature_count
         self.feature_mapping = {i: i for i in range(self.output_dim)}
         self.discrete_feature_count *= 2 if use_negation else 1
+        self.layer_type = 'binarization'
         self.min_val = nn.Parameter(min_val, requires_grad=False) if min_val is not None else None
         self.max_val = nn.Parameter(max_val, requires_grad=False) if max_val is not None else None
 
