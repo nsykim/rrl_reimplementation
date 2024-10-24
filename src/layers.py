@@ -319,7 +319,7 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
     node_to_rule_map = defaultdict(lambda: -1)
     rules = {}
     rule_counter = 0
-    rule_list = []
+    rules = []
 
     # binarized_weights shape = (number_of_nodes, input_dimensions)
     binarized_weights = (current_layer.W.t() > 0.5).type(torch.int).detach().cpu().numpy()
@@ -385,13 +385,13 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
         sorted_rule = tuple(sorted(rule.keys()))
         if sorted_rule not in rules:
             rules[sorted_rule] = rule_counter
-            rule_list.append(sorted_rule)
+            rules.append(sorted_rule)
             node_to_rule_map[node_index + position_shift] = rule_counter
             rule_counter += 1
         else:
             node_to_rule_map[node_index + position_shift] = rules[sorted_rule]
 
-    return node_to_rule_map, rule_list
+    return node_to_rule_map, rules
 
 class UnionLayer(nn.Module):
     def __init__(self, num_units, input_dim, use_negation=False, use_novel_activation=False, estimated_grad=False, alpha=0.999, beta=8, gamma=1):
@@ -401,6 +401,10 @@ class UnionLayer(nn.Module):
         self.input_dim = input_dim
         self.output_dim = self.num_units * 2  # Union of conjunction and disjunction
         self.layer_type = 'union'
+        self.activation_nodes = None
+        self.rules = None
+        self.rule_name = None
+        self.dim2id = None
         
         print(f"UnionLayer - num_units: {num_units}, input_dim: {input_dim}, use_negation: {use_negation}, use_novel_activation: {use_novel_activation}, estimated_grad: {estimated_grad}, alpha: {alpha}, beta: {beta}, gamma: {gamma}")
         if use_novel_activation:
@@ -438,28 +442,28 @@ class UnionLayer(nn.Module):
         self._sync_layer_stats()
 
         # Extract rules from conjunction and disjunction layers
-        conjunction_rules, conjunction_rule_list = self._extract_rules_for_layer(self.conjunction_layer, previous_layer, skip_connection_layer)
-        disjunction_rules, disjunction_rule_list = self._extract_rules_for_layer(self.disjunction_layer, previous_layer, skip_connection_layer, shift=len(conjunction_rules))
+        conjunction_rules, conjunction_rules = self._extract_rules_for_layer(self.conjunction_layer, previous_layer, skip_connection_layer)
+        disjunction_rules, disjunction_rules = self._extract_rules_for_layer(self.disjunction_layer, previous_layer, skip_connection_layer, shift=len(conjunction_rules))
 
         # Combine rules from both layers
         self.dim2id = defaultdict(lambda: -1, {**conjunction_rules, **disjunction_rules})
-        self.rule_list = (conjunction_rule_list, disjunction_rule_list)
+        self.rules = (conjunction_rules, disjunction_rule_list)
 
     def _sync_layer_stats(self):
         self.conjunction_layer.forward_tot = self.disjunction_layer.forward_tot = self.forward_tot
         self.conjunction_layer.node_activation_cnt = self.disjunction_layer.node_activation_cnt = self.node_activation_cnt
 
     def _extract_rules_for_layer(self, layer, previous_layer, skip_connection_layer, shift=0):
-        rule_dim2id, rule_list = extract_rules(previous_layer, skip_connection_layer, layer, position_shift=shift)
-        return rule_dim2id, rule_list
+        rule_dim2id, rules = extract_rules(previous_layer, skip_connection_layer, layer, position_shift=shift)
+        return rule_dim2id, rules
 
     def get_rule_description(self, input_rule_name, wrap_logic=False):
         self.rule_name = []
-        for rule_list, operator in zip(self.rule_list, ('&', '|')):
-            self._append_rule_descriptions(rule_list, input_rule_name, operator, wrap_logic)
+        for rules, operator in zip(self.rule_list, ('&', '|')):
+            self._append_rule_descriptions(rules, input_rule_name, operator, wrap_logic)
 
-    def _append_rule_descriptions(self, rule_list, input_rule_name, operator, wrap_logic):
-        for rule in rule_list:
+    def _append_rule_descriptions(self, rules, input_rule_name, operator, wrap_logic):
+        for rule in rules:
             description = self._build_rule_description(rule, input_rule_name, operator, wrap_logic)
             self.rule_name.append(description)
 
