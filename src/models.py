@@ -80,7 +80,7 @@ class Net(nn.Module):
             if layer.conn.is_skip_to_layer:
                 layer.x_res = x
             if count and layer.layer_type != 'linear':
-                layer.node_activation_cnt += torch.sum(x, dim=0)
+                layer.activation_nodes += torch.sum(x, dim=0)
                 layer.forward_tot += x.shape[0]
         return x
 
@@ -297,7 +297,7 @@ class RRL:
     def detect_dead_node(self, data_loader=None):
         with torch.no_grad():
             for layer in self.net.layer_list[:-1]:
-                layer.node_activation_cnt = torch.zeros(layer.output_size, dtype=torch.double, device=self.device_id)
+                layer.activation_nodes = torch.zeros(layer.output_size, dtype=torch.double, device=self.device_id)
                 layer.forward_tot = 0
 
             for x, y in data_loader:
@@ -308,7 +308,7 @@ class RRL:
         if self.net.layer_list[1] is None and train_loader is None:
             raise Exception("Need train_loader for the dead nodes detection.")
 
-        if self.net.layer_list[1].node_activation_cnt is None:
+        if self.net.layer_list[1].activation_nodes is None:
             self.detect_dead_node(train_loader)
 
         self.net.layer_list[0].get_bound_name(feature_name, mean, std)
@@ -335,7 +335,7 @@ class RRL:
             for li in range(len(label_name)):
                 print('{:.4f}'.format(w[li]), end='\t', file=file)
             now_layer = self.net.layer_list[-1 + rid[0]]
-            print('{:.4f}'.format((now_layer.node_activation_cnt[layer.rid2dim[rid]] / now_layer.forward_tot).item()),
+            print('{:.4f}'.format((now_layer.activation_nodes[layer.rid2dim[rid]] / now_layer.forward_tot).item()),
                   end='\t', file=file)
             print(now_layer.rule_name[rid[1]], end='\n', file=file)
         print('#' * 60, file=file)

@@ -144,13 +144,13 @@ class LinearRegressionLayer(nn.Module):
         prev_layer = self.conn.prev_layer
         skip_connect_layer = self.conn.skip_from_layer
 
-        always_act_pos = (prev_layer.node_activation_cnt == prev_layer.forward_tot)
+        always_act_pos = (prev_layer.activation_nodes == prev_layer.forward_tot)
         merged_dim2id = prev_dim2id = {k: (-1, v) for k, v in prev_layer.dim2id.items()}
         if skip_connect_layer is not None:
             shifted_dim2id = {(k + prev_layer.output_dim): (-2, v) for k, v in skip_connect_layer.dim2id.items()}
             merged_dim2id = defaultdict(lambda: -1, {**shifted_dim2id, **prev_dim2id})
             always_act_pos = torch.cat(
-                [always_act_pos, (skip_connect_layer.node_activation_cnt == skip_connect_layer.forward_tot)])
+                [always_act_pos, (skip_connect_layer.activation_nodes == skip_connect_layer.forward_tot)])
         
         Wl, bl = list(self.fc1.parameters())
         bl = torch.sum(Wl.T[always_act_pos], dim=0) + bl
@@ -335,8 +335,8 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
 
     for node_index, weights_row in enumerate(binarized_weights):
         # Skip nodes that are inactive (dead nodes) or fully active (always triggered)
-        if current_layer.node_activation_cnt[node_index + position_shift] == 0 or \
-           current_layer.node_activation_cnt[node_index + position_shift] == current_layer.forward_tot:
+        if current_layer.activation_nodes[node_index + position_shift] == 0 or \
+           current_layer.activation_nodes[node_index + position_shift] == current_layer.forward_tot:
             node_to_rule_map[node_index + position_shift] = -1
             continue
         
@@ -447,11 +447,11 @@ class UnionLayer(nn.Module):
 
         # Combine rules from both layers
         self.dim2id = defaultdict(lambda: -1, {**conjunction_rules, **disjunction_rules})
-        self.rules = (conjunction_rules, disjunction_rule_list)
+        self.rules = (conjunction_rules, disjunction_rules)
 
     def _sync_layer_stats(self):
         self.conjunction_layer.forward_tot = self.disjunction_layer.forward_tot = self.forward_tot
-        self.conjunction_layer.node_activation_cnt = self.disjunction_layer.node_activation_cnt = self.node_activation_cnt
+        self.conjunction_layer.activation_nodes = self.disjunction_layer.node_activation_cnt = self.node_activation_cnt
 
     def _extract_rules_for_layer(self, layer, previous_layer, skip_connection_layer, shift=0):
         rule_dim2id, rules = extract_rules(previous_layer, skip_connection_layer, layer, position_shift=shift)
