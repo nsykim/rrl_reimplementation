@@ -419,8 +419,8 @@ class UnionLayer(nn.Module):
         return torch.cat([self.conjunction_layer(input_tensor), self.disjunction_layer(input_tensor)], dim=1)
 
     def binarized_forward(self, input_tensor):
-        return torch.cat([self.conjunction_layer.binarized_logic(input_tensor), 
-                          self.disjunction_layer.binarized_logic(input_tensor)], dim=1)
+        return torch.cat([self.conjunction_layer.binarized_forward(input_tensor), 
+                          self.disjunction_layer.binarized_forward(input_tensor)], dim=1)
 
     def edge_count(self):
         return self._sum_binarized_weights(self.conjunction_layer) + self._sum_binarized_weights(self.disjunction_layer)
