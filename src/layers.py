@@ -82,7 +82,7 @@ class FeatureBinarizer(nn.Module):
         return discrete_part
 
     @torch.no_grad()
-    def discretize(self, input_data):
+    def binarized_forward(self, input_data):
         return self.forward(input_data)
 
     def clip_weights(self):
