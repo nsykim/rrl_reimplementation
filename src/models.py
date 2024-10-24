@@ -297,7 +297,7 @@ class RRL:
     def detect_dead_node(self, data_loader=None):
         with torch.no_grad():
             for layer in self.net.layer_list[:-1]:
-                layer.activation_nodes = torch.zeros(layer.output_size, dtype=torch.double, device=self.device_id)
+                layer.activation_nodes = torch.zeros(layer.output_dim, dtype=torch.double, device=self.device_id)
                 layer.forward_tot = 0
 
             for x, y in data_loader:
