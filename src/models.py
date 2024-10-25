@@ -306,7 +306,7 @@ class RRL:
         if self.net.layer_list[1].activation_nodes is None:
             self.detect_dead_node(train_loader)
 
-        self.net.layer_list[0].get_bound_name(feature_name, mean, std)
+        self.net.layer_list[0].get_feature_names(feature_name, mean, std)
 
         for i in range(1, len(self.net.layer_list) - 1):
             layer = self.net.layer_list[i]
