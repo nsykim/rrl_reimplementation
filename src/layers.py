@@ -318,7 +318,6 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
     dimIDs = defaultdict(lambda: -1)
     rules = {}
     rule_counter = 0
-    rules = []
 
     # binarized_weights shape = (number_of_nodes, input_shapeensions)
     binarized_weights = (current_layer.weights.t() > 0.5).type(torch.int).detach().cpu().numpy()
