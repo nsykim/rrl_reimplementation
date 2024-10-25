@@ -57,6 +57,7 @@ class FeatureBinarizer(nn.Module):
         self.layer_type = 'binarization'
         self.min_val = nn.Parameter(min_val, requires_grad=False) if min_val is not None else None
         self.max_val = nn.Parameter(max_val, requires_grad=False) if max_val is not None else None
+        self.node_to_rule_map = {i: i for i in range(self.output_dim)}
 
         if self.continuous_feature_count > 0:
             bin_centers = self._initialize_bin_centers()
