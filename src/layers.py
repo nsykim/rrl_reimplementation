@@ -445,7 +445,7 @@ class UnionLayer(nn.Module):
 
         conjunction_dimIDs, conjunction_rules = extract_rules(previous_layer, skip_connection_layer, self.conjunction_layer)
         disjunction_dimIDs, disjunction_rules = extract_rules(previous_layer, skip_connection_layer, 
-                                                                self.disjunction_layer, self.conjunction_layer.weights[1])
+                                                                self.disjunction_layer, self.conjunction_layer.weights.shape[1])
 
         # how much to shift the id of the rules in the disjunction layer to put into one
         shift = max(conjunction_dimIDs.values()) + 1
