@@ -123,9 +123,7 @@ class LinearRegressionLayer(nn.Module):
         self.linear = nn.Linear(self.input_shape, self.output_dim)
 
     def forward(self, inputs):
-        print(f"LinearRegressionLayer - forward - inputs shape: {inputs.shape}")
         x = self.linear(inputs)
-        print(f"LinearRegressionLayer - forward - inpuuts shape: {x.shape}")
         return x
 
     @torch.no_grad()
@@ -191,7 +189,6 @@ class ConjunctionLayer(nn.Module):
         self.gamma = gamma
 
     def forward(self, inputs):
-        print(f"ConjunctionLayer - forward - inputs shape: {inputs.shape}")
         continuous_output = self.continuous_forward(inputs)
         binarized_output = self.binarized_forward(inputs)
         return GradientGraft.apply(binarized_output, continuous_output)
