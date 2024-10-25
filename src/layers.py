@@ -318,6 +318,7 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
     dimIDs = defaultdict(lambda: -1)
     rules = {}
     rule_counter = 0
+    rule_list = []
 
     # binarized_weights shape = (number_of_nodes, input_shapeensions)
     binarized_weights = (current_layer.weights.t() > 0.5).type(torch.int).detach().cpu().numpy()
@@ -388,13 +389,13 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
         rule = tuple(sorted(rule.keys()))
         if rule not in rules:
             rules[rule] = rule_counter
-            rules.append(rule)
+            rule_list.append(rule)
             dimIDs[node_index + position_shift] = rule_counter
             rule_counter += 1
         else:
             dimIDs[node_index + position_shift] = rules[rule]
 
-    return dimIDs, rules
+    return dimIDs, rule_list
 
 class UnionLayer(nn.Module):
     def __init__(self, units, input_shape, use_negation=False, use_novel_activation=False, estimated_grad=False, alpha=0.999, beta=8, gamma=1):
