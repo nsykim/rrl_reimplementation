@@ -349,7 +349,7 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
         for weight_index, weight in enumerate(weights_row):
             # Handling for 'NOT' logic in input dimensions
             negate_input = 1
-            if current_layer.use_not:
+            if current_layer.use_negation:
                 if weight_index >= current_layer.input_shape // 2:
                     negate_input = -1
                 weight_index = weight_index % (current_layer.input_shape // 2)
