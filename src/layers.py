@@ -340,6 +340,11 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
             continue
         
         rule = {}
+        # MAPPED WITH FOLLOWING CONVENTION rule[i] = {k, rule_id}
+        # k == -1 connects to rule in previous layer
+        # k == 1 connects to a rule in previous layer (NOT)
+        # k == -2 connects to a rule in skip connection layer
+        # k == 2 connects to a rule in skip connection layer (NOT)
         feature_bounds = {}
 
         # Special handling for binarization layers to account for discrete features
@@ -381,14 +386,14 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
                     rule[(previous_rule_id[0] * negate_input, previous_rule_id[1])] = 1
         
         # Assign unique rule IDs and store in dimIDs
-        sorted_rules = tuple(sorted(rule.keys()))
-        if sorted_rules not in rules:
-            rules[sorted_rules] = rule_counter
-            rules.append(sorted_rules)
+        rule = tuple(sorted(rule.keys()))
+        if rule not in rules:
+            rules[rule] = rule_counter
+            rules.append(rule)
             dimIDs[node_index + position_shift] = rule_counter
             rule_counter += 1
         else:
-            dimIDs[node_index + position_shift] = rules[sorted_rules]
+            dimIDs[node_index + position_shift] = rules[rule]
 
     return dimIDs, rules
 
