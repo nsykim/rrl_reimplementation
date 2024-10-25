@@ -449,7 +449,7 @@ class UnionLayer(nn.Module):
 
     def _sync_layer_stats(self):
         self.conjunction_layer.forward_tot = self.disjunction_layer.forward_tot = self.forward_tot
-        self.conjunction_layer.activation_nodes = self.disjunction_layer.activation_nodes = self.node_activation_cnt
+        self.conjunction_layer.activation_nodes = self.disjunction_layer.activation_nodes = self.activation_nodes
 
     def _extract_rules_for_layer(self, layer, previous_layer, skip_connection_layer, shift=0):
         rule_dim2id, rules = extract_rules(previous_layer, skip_connection_layer, layer, position_shift=shift)
