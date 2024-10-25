@@ -187,11 +187,8 @@ class RRL:
                 y = y.cuda(self.device_id, non_blocking=True)
                 optimizer.zero_grad()
                 
-                print(f"X: {X.shape}, y: {y.shape}")
                 y_bar = self.net.forward(X) / torch.exp(self.net.t)
                 y_arg = torch.argmax(y, dim=1)
-                print(f"y_bar: {y_bar.shape} with value: {y_bar}")
-                print(f"y_arg: {y_arg.shape} with value: {y_arg}")
                 
                 loss_rrl = criterion(y_bar, y_arg) + weight_decay * self.l2_penalty()
                 

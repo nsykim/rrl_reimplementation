@@ -444,21 +444,21 @@ class UnionLayer(nn.Module):
     def get_rules(self, previous_layer, skip_connection_layer):
         self._sync_layer_stats()
 
-        # Extract rules from conjunction and disjunction layers
-        conjunction_rules, conjunction_rules = self._extract_rules_for_layer(self.conjunction_layer, previous_layer, skip_connection_layer)
-        disjunction_rules, disjunction_rules = self._extract_rules_for_layer(self.disjunction_layer, previous_layer, skip_connection_layer, shift=len(conjunction_rules))
+        conjunction_dimIDs, conjunction_rules = extract_rules(previous_layer, skip_connection_layer, self.conjunction_layer)
+        disjunction_dimIDs, disjunction_rules = extract_rules(previous_layer, skip_connection_layer, 
+                                                                self.disjunction_layer, self.conjunction_layer.weights[1])
 
-        # Combine rules from both layers
-        self.dimIDs = defaultdict(lambda: -1, {**conjunction_rules, **disjunction_rules})
-        self.rules = (conjunction_rules, disjunction_rules)
+        # how much to shift the id of the rules in the disjunction layer to put into one
+        shift = max(conjunction_dimIDs.values()) + 1
+        disjunction_dimIDs = {k: (-1 if v == -1 else v + shift) for k, v in disjunction_dimIDs.items()}
+
+        # combine the rules and dimensionIDs
+        self.dimIDs = defaultdict(lambda: -1, {**conjunction_dimIDs, **disjunction_dimIDs})
+        self.rule_list = (conjunction_rules, disjunction_rules)
 
     def _sync_layer_stats(self):
         self.conjunction_layer.forward_tot = self.disjunction_layer.forward_tot = self.forward_tot
         self.conjunction_layer.activation_nodes = self.disjunction_layer.activation_nodes = self.activation_nodes
-
-    def _extract_rules_for_layer(self, layer, previous_layer, skip_connection_layer, shift=0):
-        rule_dimIDs, rules = extract_rules(previous_layer, skip_connection_layer, layer, position_shift=shift)
-        return rule_dimIDs, rules
 
     def get_rule_description(self, input_rule_name, wrap_logic=False):
         self.rule_name = []
