@@ -44,13 +44,13 @@ class Binarize(torch.autograd.Function):
         return grad_input
 
 class FeatureBinarizer(nn.Module):
-    def __init__(self, num_bins, input_dim, use_negation=False, min_val=None, max_val=None):
+    def __init__(self, num_bins, input_shape, use_negation=False, min_val=None, max_val=None):
         super(FeatureBinarizer, self).__init__()
         self.num_bins = num_bins
-        self.input_dim = input_shape
+        self.input_shape = input_shape
         self.use_negation = use_negation
-        self.discrete_feature_count = input_dim[0]
-        self.continuous_feature_count = input_dim[1]
+        self.discrete_feature_count = input_shape[0]
+        self.continuous_feature_count = input_shape[1]
         self.output_dim = self.discrete_feature_count + 2 * num_bins * self.continuous_feature_count
         self.feature_mapping = {i: i for i in range(self.output_dim)}
         self.discrete_feature_count *= 2 if use_negation else 1
@@ -69,7 +69,7 @@ class FeatureBinarizer(nn.Module):
         return torch.randn(self.num_bins, self.continuous_feature_count)
 
     def forward(self, input_data):
-        discrete_part, continuous_part = input_data[:, :self.input_dim[0]], input_data[:, self.input_shape[0]:]
+        discrete_part, continuous_part = input_data[:, :self.input_shape[0]], input_data[:, self.input_shape[0]:]
 
         discrete_part = augment_with_negation(discrete_part, self.use_negation)
 
@@ -92,16 +92,16 @@ class FeatureBinarizer(nn.Module):
             self.bin_centers.data = torch.clamp(self.bin_centers.data, self.min_val, self.max_val)
 
     def generate_feature_names(self, feature_names, mean=None, std=None):
-        feature_labels = feature_names[:self.input_dim[0]]
+        feature_labels = feature_names[:self.input_shape[0]]
 
         if self.use_negation:
-            feature_labels += ['~' + name for name in feature_names[:self.input_dim[0]]]
+            feature_labels += ['~' + name for name in feature_names[:self.input_shape[0]]]
 
         if self.continuous_feature_count > 0:
             for center, operator in [(self.bin_centers, '>'), (self.bin_centers, '<=')]:
                 centers = center.detach().cpu().numpy()
                 for i, bin_vals in enumerate(centers.T):
-                    feature_name = feature_names[self.input_dim[0] + i]
+                    feature_name = feature_names[self.input_shape[0] + i]
                     for val in bin_vals:
                         if mean is not None and std is not None:
                             val = val * std[feature_name] + mean[feature_name]
@@ -111,16 +111,16 @@ class FeatureBinarizer(nn.Module):
         return feature_labels
 
 class LinearRegressionLayer(nn.Module):
-    def __init__(self, num_outputs, input_dim):
+    def __init__(self, num_outputs, input_shape):
         super(LinearRegressionLayer, self).__init__()
         self.num_outputs = num_outputs
-        self.input_dim = input_dim
+        self.input_shape = input_shape
         self.output_dim = num_outputs
         self.rid2dim = None
         self.rule2weights = None
         self.layer_type = 'linear'
         
-        self.linear = nn.Linear(self.input_dim, self.output_dim)
+        self.linear = nn.Linear(self.input_shape, self.output_dim)
 
     def forward(self, inputs):
         print(f"LinearRegressionLayer - forward - inputs shape: {inputs.shape}")
@@ -174,15 +174,15 @@ class LinearRegressionLayer(nn.Module):
 
 
 class ConjunctionLayer(nn.Module):
-    def __init__(self, num_conjunctions, input_dim, use_negation=False, alpha=0.999, beta=8, gamma=1, stochastic_grad=False):
+    def __init__(self, num_conjunctions, input_shape, use_negation=False, alpha=0.999, beta=8, gamma=1, stochastic_grad=False):
         super(ConjunctionLayer, self).__init__()
         self.num_conjunctions = num_conjunctions
         self.use_negation = use_negation
-        self.input_dim = input_dim * (2 if use_negation else 1)
+        self.input_shape = input_shape * (2 if use_negation else 1)
         self.output_dim = num_conjunctions
         self.layer_type = 'conjunction'
 
-        self.weights = nn.Parameter(0.5 * torch.rand(self.input_dim, self.output_dim))
+        self.weights = nn.Parameter(0.5 * torch.rand(self.input_shape, self.output_dim))
 
         self.activation_cnt = None
 
@@ -216,15 +216,15 @@ class ConjunctionLayer(nn.Module):
         self.weights.data.clamp_(INIT_L, 1.0)
 
 class DisjunctionLayer(nn.Module):
-    def __init__(self, num_disjunctions, input_dim, use_negation=False, alpha=0.999, beta=8, gamma=1, stochastic_grad=False):
+    def __init__(self, num_disjunctions, input_shape, use_negation=False, alpha=0.999, beta=8, gamma=1, stochastic_grad=False):
         super(DisjunctionLayer, self).__init__()
         self.num_disjunctions = num_disjunctions
         self.use_negation = use_negation
-        self.input_dim = input_dim * (2 if use_negation else 1)
+        self.input_shape = input_shape * (2 if use_negation else 1)
         self.output_dim = num_disjunctions
         self.layer_type = 'disjunction'
 
-        self.weights = nn.Parameter(INIT_L + (0.5 - INIT_L) * torch.rand(self.input_dim, self.num_disjunctions))
+        self.weights = nn.Parameter(INIT_L + (0.5 - INIT_L) * torch.rand(self.input_shape, self.num_disjunctions))
         self.product_function = stochastic_product if stochastic_grad else standard_product
 
         self.alpha = alpha
@@ -254,15 +254,15 @@ class DisjunctionLayer(nn.Module):
         self.weights.data.clamp_(INIT_L, 1.0)
 
 class OriginalConjunctionLayer(nn.Module):
-    def __init__(self, n, input_dim, use_negation=False, stochastic_grad=False):
+    def __init__(self, n, input_shape, use_negation=False, stochastic_grad=False):
         super(OriginalConjunctionLayer, self).__init__()
         self.n = n
         self.use_negation = use_negation
-        self.input_dim = input_dim * (2 if use_negation else 1)
+        self.input_shape = input_shape * (2 if use_negation else 1)
         self.output_dim = self.n
         self.layer_type = 'conjunction'
 
-        self.weights = nn.Parameter(0.5 * torch.rand(self.input_dim, self.n))
+        self.weights = nn.Parameter(0.5 * torch.rand(self.input_shape, self.n))
         self.product_function = stochastic_product if stochastic_grad else standard_product
 
     def forward(self, inputs):
@@ -284,15 +284,15 @@ class OriginalConjunctionLayer(nn.Module):
         self.weights.data.clamp_(0.0, 1.0)
 
 class OriginalDisjunctionLayer(nn.Module):
-    def __init__(self, n, input_dim, use_negation=False, stochastic_grad=False):
+    def __init__(self, n, input_shape, use_negation=False, stochastic_grad=False):
         super(OriginalDisjunctionLayer, self).__init__()
         self.n = n
         self.use_negation = use_negation
-        self.input_dim = input_dim * (2 if use_negation else 1)
+        self.input_shape = input_shape * (2 if use_negation else 1)
         self.output_dim = n
         self.layer_type = 'disjunction'
 
-        self.weights = nn.Parameter(0.5 * torch.rand(self.input_dim, n))
+        self.weights = nn.Parameter(0.5 * torch.rand(self.input_shape, n))
         self.product_function = stochastic_product if stochastic_grad else standard_product
 
     def forward(self, inputs):
@@ -320,7 +320,7 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
     rule_counter = 0
     rules = []
 
-    # binarized_weights shape = (number_of_nodes, input_dimensions)
+    # binarized_weights shape = (number_of_nodes, input_shapeensions)
     binarized_weights = (current_layer.weights.t() > 0.5).type(torch.int).detach().cpu().numpy()
 
     # Merge node_to_rule_map from the previous layer and skip connection layer (if available)
@@ -343,16 +343,16 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
         feature_bounds = {}
 
         # Special handling for binarization layers to account for discrete features
-        if previous_layer.layer_type == 'binarization' and previous_layer.input_dim[1] > 0:
+        if previous_layer.layer_type == 'binarization' and previous_layer.input_shape[1] > 0:
             discrete_features = torch.cat((previous_layer.cl.t().reshape(-1), previous_layer.cl.t().reshape(-1))).detach().cpu().numpy()
 
         for weight_index, weight in enumerate(weights_row):
             # Handling for 'NOT' logic in input dimensions
             negate_input = 1
             if current_layer.use_not:
-                if weight_index >= current_layer.input_dim // 2:
+                if weight_index >= current_layer.input_shape // 2:
                     negate_input = -1
-                weight_index = weight_index % (current_layer.input_dim // 2)
+                weight_index = weight_index % (current_layer.input_shape // 2)
 
             # Only consider positive weights and valid previous mappings
             if weight > 0 and merged_node_map[weight_index][1] != -1:
@@ -393,25 +393,24 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
     return node_to_rule_map, rules
 
 class UnionLayer(nn.Module):
-    def __init__(self, num_units, input_dim, use_negation=False, use_novel_activation=False, estimated_grad=False, alpha=0.999, beta=8, gamma=1):
+    def __init__(self, units, input_shape, use_negation=False, use_novel_activation=False, estimated_grad=False, alpha=0.999, beta=8, gamma=1):
         super(UnionLayer, self).__init__()
-        self.num_units = num_units
+        self.units = units
         self.use_negation = use_negation
-        self.input_dim = input_dim
-        self.output_dim = self.num_units * 2  # Union of conjunction and disjunction
+        self.input_shape = input_shape
+        self.output_dim = self.units * 2  # Union of conjunction and disjunction
         self.layer_type = 'union'
         self.activation_nodes = None
         self.rules = None
         self.rule_name = None
         self.node_to_rule_map = None
         
-        print(f"UnionLayer - num_units: {num_units}, input_dim: {input_dim}, use_negation: {use_negation}, use_novel_activation: {use_novel_activation}, estimated_grad: {estimated_grad}, alpha: {alpha}, beta: {beta}, gamma: {gamma}")
         if use_novel_activation:
-            self.conjunction_layer = ConjunctionLayer(num_conjunctions=num_units, input_dim=input_dim, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma)
-            self.disjunction_layer = DisjunctionLayer(num_disjunctions=num_units, input_dim=input_dim, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma)
+            self.conjunction_layer = ConjunctionLayer(num_conjunctions=units, input_shape=input_shape, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma)
+            self.disjunction_layer = DisjunctionLayer(num_disjunctions=units, input_shape=input_shape, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma)
         else:
-            self.conjunction_layer = OriginalConjunctionLayer(n=num_units, input_dim=input_dim, use_negation=use_negation, stochastic_grad=estimated_grad)
-            self.disjunction_layer = OriginalDisjunctionLayer(n=num_units, input_dim=input_dim, use_negation=use_negation, stochastic_grad=estimated_grad)
+            self.conjunction_layer = OriginalConjunctionLayer(n=units, input_shape=input_shape, use_negation=use_negation, stochastic_grad=estimated_grad)
+            self.disjunction_layer = OriginalDisjunctionLayer(n=units, input_shape=input_shape, use_negation=use_negation, stochastic_grad=estimated_grad)
 
     def forward(self, input_tensor):
         return torch.cat([self.conjunction_layer(input_tensor), self.disjunction_layer(input_tensor)], dim=1)
