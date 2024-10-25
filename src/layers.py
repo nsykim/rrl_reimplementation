@@ -118,7 +118,6 @@ class LinearRegressionLayer(nn.Module):
         self.rid2dim = None
         self.rule2weights = None
         self.layer_type = 'linear_regression'
-        self.activation_nodes = None
         
         self.linear = nn.Linear(self.input_dim, self.output_dim)
 

@@ -24,7 +24,6 @@ class Net(nn.Module):
         self._initialize_layers(dim_list, use_nlaf, estimated_grad, alpha, beta, gamma)
 
     def _initialize_layers(self, dim_list, use_nlaf, estimated_grad, alpha, beta, gamma):
-        print(f"dim_list: {dim_list}")
         prev_layer_dim = dim_list[0]
         for i in range(1, len(dim_list)):
             num = prev_layer_dim
@@ -58,17 +57,13 @@ class Net(nn.Module):
             skip_from_layer.conn.is_skip_to_layer = True
 
     def forward(self, x):
-        print(f"X: {x.shape}")
         for layer in self.layer_list:
             if layer.conn.skip_from_layer is not None:
                 x = torch.cat((x, layer.conn.skip_from_layer.x_res), dim=1)
-                print(f"layer is in conn.skip_fron_layer idk X: {x.shape}")
                 del layer.conn.skip_from_layer.x_res
             x = layer(x) # calls the forward method of the layer
-            print(f"X after layer {layer}: {x.shape}")
             if layer.conn.is_skip_to_layer:
                 layer.x_res = x
-        print(f"X after all layers: {x.shape}")
         return x
     
     def binarized_forward(self, x, count=False):
