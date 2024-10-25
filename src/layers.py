@@ -44,13 +44,13 @@ class Binarize(torch.autograd.Function):
         return grad_input
 
 class FeatureBinarizer(nn.Module):
-    def __init__(self, num_bins, input_shape, use_negation=False, min_val=None, max_val=None):
+    def __init__(self, num_bins, input_dim, use_negation=False, min_val=None, max_val=None):
         super(FeatureBinarizer, self).__init__()
         self.num_bins = num_bins
-        self.input_shape = input_shape
+        self.input_dim = input_shape
         self.use_negation = use_negation
-        self.discrete_feature_count = input_shape[0]
-        self.continuous_feature_count = input_shape[1]
+        self.discrete_feature_count = input_dim[0]
+        self.continuous_feature_count = input_dim[1]
         self.output_dim = self.discrete_feature_count + 2 * num_bins * self.continuous_feature_count
         self.feature_mapping = {i: i for i in range(self.output_dim)}
         self.discrete_feature_count *= 2 if use_negation else 1
@@ -69,7 +69,7 @@ class FeatureBinarizer(nn.Module):
         return torch.randn(self.num_bins, self.continuous_feature_count)
 
     def forward(self, input_data):
-        discrete_part, continuous_part = input_data[:, :self.input_shape[0]], input_data[:, self.input_shape[0]:]
+        discrete_part, continuous_part = input_data[:, :self.input_dim[0]], input_data[:, self.input_shape[0]:]
 
         discrete_part = augment_with_negation(discrete_part, self.use_negation)
 
@@ -92,16 +92,16 @@ class FeatureBinarizer(nn.Module):
             self.bin_centers.data = torch.clamp(self.bin_centers.data, self.min_val, self.max_val)
 
     def generate_feature_names(self, feature_names, mean=None, std=None):
-        feature_labels = feature_names[:self.input_shape[0]]
+        feature_labels = feature_names[:self.input_dim[0]]
 
         if self.use_negation:
-            feature_labels += ['~' + name for name in feature_names[:self.input_shape[0]]]
+            feature_labels += ['~' + name for name in feature_names[:self.input_dim[0]]]
 
         if self.continuous_feature_count > 0:
             for center, operator in [(self.bin_centers, '>'), (self.bin_centers, '<=')]:
                 centers = center.detach().cpu().numpy()
                 for i, bin_vals in enumerate(centers.T):
-                    feature_name = feature_names[self.input_shape[0] + i]
+                    feature_name = feature_names[self.input_dim[0] + i]
                     for val in bin_vals:
                         if mean is not None and std is not None:
                             val = val * std[feature_name] + mean[feature_name]
