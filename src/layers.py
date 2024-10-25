@@ -320,7 +320,7 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
     rules = []
 
     # binarized_weights shape = (number_of_nodes, input_dimensions)
-    binarized_weights = (current_layer.W.t() > 0.5).type(torch.int).detach().cpu().numpy()
+    binarized_weights = (current_layer.weights.t() > 0.5).type(torch.int).detach().cpu().numpy()
 
     # Merge node_to_rule_map from the previous layer and skip connection layer (if available)
     merged_node_map = previous_node_map = {key: (-1, val) for key, val in previous_layer.node_to_rule_map.items()}
