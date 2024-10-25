@@ -117,7 +117,7 @@ class LinearRegressionLayer(nn.Module):
         self.output_dim = num_outputs
         self.rid2dim = None
         self.rule2weights = None
-        self.layer_type = 'linear_regression'
+        self.layer_type = 'linear'
         
         self.linear = nn.Linear(self.input_dim, self.output_dim)
 
