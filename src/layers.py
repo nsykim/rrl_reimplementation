@@ -146,10 +146,10 @@ class LinearRegressionLayer(nn.Module):
         skip_connect_layer = self.conn.skip_from_layer
 
         always_act_pos = (prev_layer.activation_nodes == prev_layer.forward_tot)
-        merged_dim2id = prev_dim2id = {k: (-1, v) for k, v in prev_layer.dim2id.items()}
+        merged_node_to_rule_map = prev_dim2id = {k: (-1, v) for k, v in prev_layer.dim2id.items()}
         if skip_connect_layer is not None:
-            shifted_dim2id = {(k + prev_layer.output_dim): (-2, v) for k, v in skip_connect_layer.dim2id.items()}
-            merged_dim2id = defaultdict(lambda: -1, {**shifted_dim2id, **prev_dim2id})
+            shifted_node_to_rule_map = {(k + prev_layer.output_dim): (-2, v) for k, v in skip_connect_layer.dim2id.items()}
+            merged_node_to_rule_map = defaultdict(lambda: -1, {**shifted_dim2id, **prev_dim2id})
             always_act_pos = torch.cat(
                 [always_act_pos, (skip_connect_layer.activation_nodes == skip_connect_layer.forward_tot)])
         
@@ -162,7 +162,7 @@ class LinearRegressionLayer(nn.Module):
         rid2dim = {}
         for label_id, wl in enumerate(Wl):
             for i, w in enumerate(wl):
-                rid = merged_dim2id[i]
+                rid = merged_node_to_rule_map[i]
                 if rid == -1 or rid[1] == -1:
                     continue
                 marked[rid][label_id] += w
@@ -402,7 +402,7 @@ class UnionLayer(nn.Module):
         self.activation_nodes = None
         self.rules = None
         self.rule_name = None
-        self.dim2id = None
+        self.node_to_rule_map = None
         
         print(f"UnionLayer - num_units: {num_units}, input_dim: {input_dim}, use_negation: {use_negation}, use_novel_activation: {use_novel_activation}, estimated_grad: {estimated_grad}, alpha: {alpha}, beta: {beta}, gamma: {gamma}")
         if use_novel_activation:
@@ -444,7 +444,7 @@ class UnionLayer(nn.Module):
         disjunction_rules, disjunction_rules = self._extract_rules_for_layer(self.disjunction_layer, previous_layer, skip_connection_layer, shift=len(conjunction_rules))
 
         # Combine rules from both layers
-        self.dim2id = defaultdict(lambda: -1, {**conjunction_rules, **disjunction_rules})
+        self.node_to_rule_map = defaultdict(lambda: -1, {**conjunction_rules, **disjunction_rules})
         self.rules = (conjunction_rules, disjunction_rules)
 
     def _sync_layer_stats(self):
@@ -452,8 +452,8 @@ class UnionLayer(nn.Module):
         self.conjunction_layer.activation_nodes = self.disjunction_layer.activation_nodes = self.activation_nodes
 
     def _extract_rules_for_layer(self, layer, previous_layer, skip_connection_layer, shift=0):
-        rule_dim2id, rules = extract_rules(previous_layer, skip_connection_layer, layer, position_shift=shift)
-        return rule_dim2id, rules
+        rule_node_to_rule_map, rules = extract_rules(previous_layer, skip_connection_layer, layer, position_shift=shift)
+        return rule_node_to_rule_map, rules
 
     def get_rule_description(self, input_rule_name, wrap_logic=False):
         self.rule_name = []
