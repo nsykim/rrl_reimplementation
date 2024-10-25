@@ -356,9 +356,9 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
 
             # Only consider positive weights and valid previous mappings
             if weight > 0 and merged_node_map[weight_index][1] != -1:
-                if previous_layer.layer_type == 'binarization' and weight_index >= previous_layer.disc_num:
+                if previous_layer.layer_type == 'binarization' and weight_index >= previous_layer.discrete_feature_count:
                     # Handle discrete input features
-                    feature_index = weight_index - previous_layer.disc_num
+                    feature_index = weight_index - previous_layer.discrete_feature_count
                     bin_index = feature_index // previous_layer.n
                     if bin_index not in feature_bounds:
                         feature_bounds[bin_index] = [weight_index, discrete_features[feature_index]]
