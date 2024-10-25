@@ -57,7 +57,7 @@ class FeatureBinarizer(nn.Module):
         self.layer_type = 'binarization'
         self.min_val = nn.Parameter(min_val, requires_grad=False) if min_val is not None else None
         self.max_val = nn.Parameter(max_val, requires_grad=False) if max_val is not None else None
-        self.node_to_rule_map = {i: i for i in range(self.output_dim)}
+        self.dimIDs = {i: i for i in range(self.output_dim)}
 
         if self.continuous_feature_count > 0:
             bin_centers = self._initialize_bin_centers()
@@ -147,10 +147,10 @@ class LinearRegressionLayer(nn.Module):
         skip_connect_layer = self.conn.skip_from_layer
 
         always_act_pos = (prev_layer.activation_nodes == prev_layer.forward_tot)
-        merged_node_to_rule_map = prev_dim2id = {k: (-1, v) for k, v in prev_layer.dim2id.items()}
+        merged_dimIDs = prev_dimIDs = {k: (-1, v) for k, v in prev_layer.dimIDs.items()}
         if skip_connect_layer is not None:
-            shifted_node_to_rule_map = {(k + prev_layer.output_dim): (-2, v) for k, v in skip_connect_layer.dim2id.items()}
-            merged_node_to_rule_map = defaultdict(lambda: -1, {**shifted_dim2id, **prev_dim2id})
+            shifted_dimIDs = {(k + prev_layer.output_dim): (-2, v) for k, v in skip_connect_layer.dimIDs.items()}
+            merged_dimIDs = defaultdict(lambda: -1, {**shifted_dimIDs, **prev_dimIDs})
             always_act_pos = torch.cat(
                 [always_act_pos, (skip_connect_layer.activation_nodes == skip_connect_layer.forward_tot)])
         
@@ -163,7 +163,7 @@ class LinearRegressionLayer(nn.Module):
         rid2dim = {}
         for label_id, wl in enumerate(Wl):
             for i, w in enumerate(wl):
-                rid = merged_node_to_rule_map[i]
+                rid = merged_dimIDs[i]
                 if rid == -1 or rid[1] == -1:
                     continue
                 marked[rid][label_id] += w
@@ -315,7 +315,7 @@ class OriginalDisjunctionLayer(nn.Module):
 
 
 def extract_rules(previous_layer, skip_connection_layer, current_layer, position_shift=0):
-    node_to_rule_map = defaultdict(lambda: -1)
+    dimIDs = defaultdict(lambda: -1)
     rules = {}
     rule_counter = 0
     rules = []
@@ -323,12 +323,12 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
     # binarized_weights shape = (number_of_nodes, input_shapeensions)
     binarized_weights = (current_layer.weights.t() > 0.5).type(torch.int).detach().cpu().numpy()
 
-    # Merge node_to_rule_map from the previous layer and skip connection layer (if available)
-    merged_node_map = previous_node_map = {key: (-1, val) for key, val in previous_layer.node_to_rule_map.items()}
+    # Merge dimIDs from the previous layer and skip connection layer (if available)
+    merged_node_map = previous_node_map = {key: (-1, val) for key, val in previous_layer.dimIDs.items()}
     if skip_connection_layer is not None:
         shifted_node_map = {
             (key + previous_layer.output_dim): (-2, val) 
-            for key, val in skip_connection_layer.node_to_rule_map.items()
+            for key, val in skip_connection_layer.dimIDs.items()
         }
         merged_node_map = defaultdict(lambda: -1, {**shifted_node_map, **previous_node_map})
 
@@ -336,7 +336,7 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
         # Skip nodes that are inactive (dead nodes) or fully active (always triggered)
         if current_layer.activation_nodes[node_index + position_shift] == 0 or \
            current_layer.activation_nodes[node_index + position_shift] == current_layer.forward_tot:
-            node_to_rule_map[node_index + position_shift] = -1
+            dimIDs[node_index + position_shift] = -1
             continue
         
         rule = {}
@@ -380,17 +380,17 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
                     previous_rule_id = merged_node_map[weight_index]
                     rule[(previous_rule_id[0] * negate_input, previous_rule_id[1])] = 1
         
-        # Assign unique rule IDs and store in node_to_rule_map
-        sorted_rule = tuple(sorted(rule.keys()))
-        if sorted_rule not in rules:
-            rules[sorted_rule] = rule_counter
-            rules.append(sorted_rule)
-            node_to_rule_map[node_index + position_shift] = rule_counter
+        # Assign unique rule IDs and store in dimIDs
+        sorted_rules = tuple(sorted(rule.keys()))
+        if sorted_rules not in rules:
+            rules[sorted_rules] = rule_counter
+            rules.append(sorted_rules)
+            dimIDs[node_index + position_shift] = rule_counter
             rule_counter += 1
         else:
-            node_to_rule_map[node_index + position_shift] = rules[sorted_rule]
+            dimIDs[node_index + position_shift] = rules[sorted_rules]
 
-    return node_to_rule_map, rules
+    return dimIDs, rules
 
 class UnionLayer(nn.Module):
     def __init__(self, units, input_shape, use_negation=False, use_novel_activation=False, estimated_grad=False, alpha=0.999, beta=8, gamma=1):
@@ -403,7 +403,7 @@ class UnionLayer(nn.Module):
         self.activation_nodes = None
         self.rules = None
         self.rule_name = None
-        self.node_to_rule_map = None
+        self.dimIDs = None
         
         if use_novel_activation:
             self.conjunction_layer = ConjunctionLayer(num_conjunctions=units, input_shape=input_shape, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma)
@@ -444,7 +444,7 @@ class UnionLayer(nn.Module):
         disjunction_rules, disjunction_rules = self._extract_rules_for_layer(self.disjunction_layer, previous_layer, skip_connection_layer, shift=len(conjunction_rules))
 
         # Combine rules from both layers
-        self.node_to_rule_map = defaultdict(lambda: -1, {**conjunction_rules, **disjunction_rules})
+        self.dimIDs = defaultdict(lambda: -1, {**conjunction_rules, **disjunction_rules})
         self.rules = (conjunction_rules, disjunction_rules)
 
     def _sync_layer_stats(self):
@@ -452,8 +452,8 @@ class UnionLayer(nn.Module):
         self.conjunction_layer.activation_nodes = self.disjunction_layer.activation_nodes = self.activation_nodes
 
     def _extract_rules_for_layer(self, layer, previous_layer, skip_connection_layer, shift=0):
-        rule_node_to_rule_map, rules = extract_rules(previous_layer, skip_connection_layer, layer, position_shift=shift)
-        return rule_node_to_rule_map, rules
+        rule_dimIDs, rules = extract_rules(previous_layer, skip_connection_layer, layer, position_shift=shift)
+        return rule_dimIDs, rules
 
     def get_rule_description(self, input_rule_name, wrap_logic=False):
         self.rule_name = []
