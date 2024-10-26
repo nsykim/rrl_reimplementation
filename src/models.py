@@ -313,7 +313,7 @@ class RRL:
             layer.get_rule_description((skip_rule_name, layer.conn.prev_layer.rule_name), wrap=wrap_prev_rule)
 
         layer = self.net.layer_list[-1]
-        layer.get_rule2weights(layer.conn.prev_layer, layer.conn.skip_from_layer)
+        layer.calculate_rule_weights(layer.conn.prev_layer, layer.conn.skip_from_layer)
         
         if not display:
             return layer.rule2weights
