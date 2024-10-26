@@ -459,23 +459,23 @@ class UnionLayer(nn.Module):
         self.conjunction_layer.forward_tot = self.disjunction_layer.forward_tot = self.forward_tot
         self.conjunction_layer.activation_nodes = self.disjunction_layer.activation_nodes = self.activation_nodes
 
-    def get_rule_description(self, input_rule_name, wrap_logic=False):
+    def get_rule_description(self, input_rule_name, wrap=False):
         self.rule_name = []
         for rules, operator in zip(self.rule_list, ('&', '|')):
-            self._append_rule_descriptions(rules, input_rule_name, operator, wrap_logic)
+            self._append_rule_descriptions(rules, input_rule_name, operator, wrap)
 
-    def _append_rule_descriptions(self, rules, input_rule_name, operator, wrap_logic):
+    def _append_rule_descriptions(self, rules, input_rule_name, operator, wrap):
         for rule in rules:
-            description = self._build_rule_description(rule, input_rule_name, operator, wrap_logic)
+            description = self._build_rule_description(rule, input_rule_name, operator, wrap)
             self.rule_name.append(description)
 
-    def _build_rule_description(self, rule, input_rule_name, operator, wrap_logic):
+    def _build_rule_description(self, rule, input_rule_name, operator, wrap):
         rule_description = ''
         for i, (layer_shift, rule_id) in enumerate(rule):
             prefix = f' {operator} ' if i != 0 else ''
             not_str = '~' if layer_shift > 0 else ''
             layer_shift *= -1 if layer_shift > 0 else 1
             var_name = input_rule_name[2 + layer_shift][rule_id]
-            var_str = f'({var_name})' if wrap_logic or not_str else var_name
+            var_str = f'({var_name})' if wrap or not_str else var_name
             rule_description += f"{prefix}{not_str}{var_str}"
         return rule_description
