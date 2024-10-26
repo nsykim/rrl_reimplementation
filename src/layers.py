@@ -152,7 +152,7 @@ class LinearRegressionLayer(nn.Module):
             always_act_pos = torch.cat(
                 [always_act_pos, (skip_connect_layer.activation_nodes == skip_connect_layer.forward_tot)])
         
-        Wl, bl = list(self.fc1.parameters())
+        Wl, bl = list(self.linear.parameters())
         bl = torch.sum(Wl.T[always_act_pos], dim=0) + bl
         Wl = Wl.cpu().detach().numpy()
         self.bl = bl.cpu().detach().numpy()
