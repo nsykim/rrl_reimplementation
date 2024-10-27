@@ -267,15 +267,15 @@ class OriginalConjunctionLayer(nn.Module):
         binarized_output = self.binarized_forward(inputs)
         return GradientGraft.apply(binarized_output, continuous_output)
 
-    def continuous_forward(self, x):
-        x = augment_with_negation(x, self.use_negation)
-        return self.product_function(1 - (1 - x).unsqueeze(-1) * self.weights)
+    def continuous_forward(self, inputs):
+        inputs = augment_with_negation(inputs, self.use_negation)
+        return self.product_function(1 - (1 - inputs).unsqueeze(-1) * self.weights)
 
     @torch.no_grad()
-    def binarized_forward(self, x):
-        x = augment_with_negation(x, self.use_negation)
+    def binarized_forward(self, inputs):
+        inputs = augment_with_negation(inputs, self.use_negation)
         binarized_weights = Binarize.apply(self.weights - THRESHOLD)
-        return torch.prod(1 - (1 - x).unsqueeze(-1) * binarized_weights, dim=1)
+        return torch.prod(1 - (1 - inputs).unsqueeze(-1) * binarized_weights, dim=1)
 
     def clip(self):
         self.weights.data.clamp_(0.0, 1.0)
@@ -305,7 +305,7 @@ class OriginalDisjunctionLayer(nn.Module):
     def binarized_forward(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
         binarized_weights = Binarize.apply(self.weights - THRESHOLD)
-        return 1 - torch.prod(1 - inputs * binarized_weights, dim=1)
+        return 1 - torch.prod(1 - inputs.unsqueeze(-1) * binarized_weights, dim=1)
 
     def clip(self):
         self.weights.data.clamp_(0.0, 1.0)
