@@ -298,7 +298,7 @@ class OriginalConjunctionLayer(nn.Module):
         binarized_weights = Binarize.apply(self.weights - THRESHOLD)
         return torch.prod(1 - (1 - inputs).unsqueeze(-1) * binarized_weights, dim=1)
 
-    def clip(self):
+    def clip_weights (self):
         self.weights.data.clamp_(0.0, 1.0)
 
 class OriginalDisjunctionLayer(nn.Module):
@@ -328,7 +328,7 @@ class OriginalDisjunctionLayer(nn.Module):
         binarized_weights = Binarize.apply(self.weights - THRESHOLD)
         return 1 - torch.prod(1 - inputs.unsqueeze(-1) * binarized_weights, dim=1)
 
-    def clip(self):
+    def clip_weights(self):
         self.weights.data.clamp_(0.0, 1.0)
 
 
