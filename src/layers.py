@@ -331,8 +331,6 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
 
     for node_index, weights_row in enumerate(binarized_weights):
         # Skip nodes that are inactive (dead nodes) or fully active (always triggered)
-        print(f"node_index: {node_index}, position_shift: {position_shift}")
-        print(f"type of node_index: {type(node_index)}, type of position_shift: {type(position_shift)}")
         if current_layer.activation_nodes[node_index + position_shift] == 0 or \
            current_layer.activation_nodes[node_index + position_shift] == current_layer.forward_tot:
             dimIDs[node_index + position_shift] = -1
