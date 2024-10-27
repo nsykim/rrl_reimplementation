@@ -320,7 +320,7 @@ class OriginalDisjunctionLayer(nn.Module):
 
     def continuous_forward(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
-        return 1 - self.prod(1 - inputs)
+        return 1 - self.prod.apply(1 - inputs.unsqueeze(-1) * self.weights)
 
     @torch.no_grad()
     def binarized_forward(self, inputs):
