@@ -30,17 +30,17 @@ class Net(nn.Module):
             skip_from_layer = None
             if self.use_skip and i >= 4:
                 skip_from_layer = self.layer_list[-2]
-                num += skip_from_layer.output_dim
+                num += skip_from_layer.output_size
 
             if i == 1:
-                layer = FeatureBinarizer(dim_list[i], num, self.use_not, self.left, self.right)
+                layer = FeatureBinarizer(dim_list[i], num, use_negation=self.use_not, min_val=self.left, max_val=self.right)
                 layer_name = f'binary{i}'
             elif i == len(dim_list) - 1:
                 layer = LinearRegressionLayer(dim_list[i], num)
                 layer_name = f'lr{i}'
             else:
                 layer_use_not = i != 2
-                layer = UnionLayer(dim_list[i], num, use_nlaf=use_nlaf, estimated_grad=estimated_grad, use_not=layer_use_not, alpha=alpha, beta=beta, gamma=gamma)
+                layer = UnionLayer(dim_list[i], num, use_novel_activation=use_nlaf, estimated_grad=estimated_grad, use_negation=layer_use_not, alpha=alpha, beta=beta, gamma=gamma)
                 layer_name = f'union{i}'
 
             self._set_layer_connections(layer, skip_from_layer)
@@ -61,7 +61,7 @@ class Net(nn.Module):
             if layer.conn.skip_from_layer is not None:
                 x = torch.cat((x, layer.conn.skip_from_layer.x_res), dim=1)
                 del layer.conn.skip_from_layer.x_res
-            x = layer(x)
+            x = layer(x) # calls the forward method of the layer
             if layer.conn.is_skip_to_layer:
                 layer.x_res = x
         return x
@@ -75,12 +75,12 @@ class Net(nn.Module):
             if layer.conn.is_skip_to_layer:
                 layer.x_res = x
             if count and layer.layer_type != 'linear':
-                layer.node_activation_cnt += torch.sum(x, dim=0)
+                layer.activation_nodes += torch.sum(x, dim=0)
                 layer.forward_tot += x.shape[0]
         return x
 
 
-class MyDistributedDataParallel(torch.nn.parallel.DistributedDataParallel):
+class DistributedDataParallel(torch.nn.parallel.DistributedDataParallel):
     @property
     def layer_list(self):
         return self.module.layer_list
@@ -129,7 +129,7 @@ class RRL:
         net = Net(dim_list, use_not=use_not, left=left, right=right, use_nlaf=use_nlaf, estimated_grad=estimated_grad, use_skip=use_skip, alpha=alpha, beta=beta, gamma=gamma, temperature=temperature)
         net.cuda(self.device_id)
         if distributed:
-            net = MyDistributedDataParallel(net, device_ids=[self.device_id])
+            net = DistributedDataParallel(net, device_ids=[self.device_id])
         return net
 
     def clip(self):
@@ -138,16 +138,17 @@ class RRL:
     
     def edge_penalty(self):
         return sum(layer.edge_count() for layer in self.net.layer_list[1:-1])
+
     
     def l1_penalty(self):
-        return sum(layer.l1_norm() for layer in self.net.layer_list[1:])
+        return sum(layer.compute_l1_norm() for layer in self.net.layer_list[1:])
     
     def l2_penalty(self):
-        return sum(layer.l2_norm() for layer in self.net.layer_list[1:])
+        return sum(layer.compute_l2_norm() for layer in self.net.layer_list[1:])
     
     def mixed_penalty(self):
-        penalty = sum(layer.l2_norm() for layer in self.net.layer_list[1:-1])
-        penalty += self.net.layer_list[-1].l1_norm()
+        penalty = sum(layer.compute_l2_norm() for layer in self.net.layer_list[1:-1])
+        penalty += self.net.layer_list[-1].compute_l1_norm()
         return penalty
 
     @staticmethod
@@ -280,6 +281,7 @@ class RRL:
         return accuracy_b, f1_score_b
 
     def save_model(self):
+        print('Saving model...')
         rrl_args = {'dim_list': self.dim_list, 'use_not': self.use_not, 'use_skip': self.use_skip, 'estimated_grad': self.estimated_grad, 
                     'use_nlaf': self.use_nlaf, 'alpha': self.alpha, 'beta': self.beta, 'gamma': self.gamma}
         torch.save({'model_state_dict': self.net.state_dict(), 'rrl_args': rrl_args}, self.save_path)
@@ -287,21 +289,21 @@ class RRL:
     def detect_dead_node(self, data_loader=None):
         with torch.no_grad():
             for layer in self.net.layer_list[:-1]:
-                layer.node_activation_cnt = torch.zeros(layer.output_dim, dtype=torch.double, device=self.device_id)
+                layer.activation_nodes = torch.zeros(layer.output_dim, dtype=torch.double, device=self.device_id)
                 layer.forward_tot = 0
 
             for x, y in data_loader:
                 x_bar = x.cuda(self.device_id)
-                self.net.bi_forward(x_bar, count=True)
+                self.net.binarized_forward(x_bar, count=True)
 
     def rule_print(self, feature_name, label_name, train_loader, file=sys.stdout, mean=None, std=None, display=True):
         if self.net.layer_list[1] is None and train_loader is None:
             raise Exception("Need train_loader for the dead nodes detection.")
 
-        if self.net.layer_list[1].node_activation_cnt is None:
+        if self.net.layer_list[1].activation_nodes is None:
             self.detect_dead_node(train_loader)
 
-        self.net.layer_list[0].get_bound_name(feature_name, mean, std)
+        self.net.layer_list[0].generate_feature_names(feature_name, mean, std)
 
         for i in range(1, len(self.net.layer_list) - 1):
             layer = self.net.layer_list[i]
@@ -311,7 +313,7 @@ class RRL:
             layer.get_rule_description((skip_rule_name, layer.conn.prev_layer.rule_name), wrap=wrap_prev_rule)
 
         layer = self.net.layer_list[-1]
-        layer.get_rule2weights(layer.conn.prev_layer, layer.conn.skip_from_layer)
+        layer.calculate_rule_weights(layer.conn.prev_layer, layer.conn.skip_from_layer)
         
         if not display:
             return layer.rule2weights
@@ -325,7 +327,7 @@ class RRL:
             for li in range(len(label_name)):
                 print('{:.4f}'.format(w[li]), end='\t', file=file)
             now_layer = self.net.layer_list[-1 + rid[0]]
-            print('{:.4f}'.format((now_layer.node_activation_cnt[layer.rid2dim[rid]] / now_layer.forward_tot).item()),
+            print('{:.4f}'.format((now_layer.activation_nodes[layer.rid2dim[rid]] / now_layer.forward_tot).item()),
                   end='\t', file=file)
             print(now_layer.rule_name[rid[1]], end='\n', file=file)
         print('#' * 60, file=file)
