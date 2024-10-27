@@ -297,7 +297,7 @@ class OriginalDisjunctionLayer(nn.Module):
         binarized_output = self.binarized_forward(inputs)
         return GradientGraft.apply(binarized_output, continuous_output)
 
-    def continuous_foward(self, inputs):
+    def continuous_forward(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
         return 1 - self.product_function(1 - inputs)
 
