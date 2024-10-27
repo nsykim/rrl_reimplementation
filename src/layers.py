@@ -304,7 +304,7 @@ class OriginalDisjunctionLayer(nn.Module):
     @torch.no_grad()
     def binarized_forward(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
-        binarized_weights = (self.weights > 0.5).float()
+        binarized_weights = Binarize.apply(self.weights - THRESHOLD)
         return 1 - torch.prod(1 - inputs * binarized_weights, dim=1)
 
     def clip(self):
