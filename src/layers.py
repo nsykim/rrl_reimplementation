@@ -13,14 +13,36 @@ def augment_with_negation(x, use_negation):
         return torch.cat((x, 1 - x), dim=1)
     return x
 
-def stochastic_product(inputs):
-    """A stochastic product function that adds noise during training."""
-    noise = torch.rand_like(inputs) * 0.1
-    return torch.prod(inputs + noise, dim=1)
+class Product(torch.autograd.Function):
+    """Tensor product function."""
+    @staticmethod
+    def forward(ctx, X):
+        y = (-1. / (-1. + torch.sum(torch.log(X), dim=1)))
+        ctx.save_for_backward(X, y)
+        return y
 
-def standard_product(inputs):
-    """Standard product function."""
-    return torch.prod(inputs, dim=1)
+    @staticmethod
+    def backward(ctx, grad_output):
+        X, y, = ctx.saved_tensors
+        grad_input = grad_output.unsqueeze(1) * (y.unsqueeze(1) ** 2 / (X + EPSILON))
+        return grad_input
+
+
+class EstimatedProduct(torch.autograd.Function):
+    """Tensor product function with a estimated derivative."""
+    @staticmethod
+    def forward(ctx, X):
+        y = (-1. / (-1. + torch.sum(torch.log(X), dim=1)))
+        ctx.save_for_backward(X, y)
+        return y
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        X, y, = ctx.saved_tensors
+        grad_input = grad_output.unsqueeze(1) * ((-1. / (-1. + torch.log(y.unsqueeze(1) ** 2))) / (X + EPSILON))
+        return grad_input
+
+
 
 class GradientGraft(torch.autograd.Function):
     @staticmethod
@@ -222,7 +244,6 @@ class DisjunctionLayer(nn.Module):
         self.layer_type = 'disjunction'
 
         self.weights = nn.Parameter(INIT_L + (0.5 - INIT_L) * torch.rand(self.input_shape, self.num_disjunctions))
-        self.product_function = stochastic_product if stochastic_grad else standard_product
 
         self.alpha = alpha
         self.beta = beta
@@ -260,7 +281,7 @@ class OriginalConjunctionLayer(nn.Module):
         self.layer_type = 'conjunction'
 
         self.weights = nn.Parameter(0.5 * torch.rand(self.input_shape, self.n))
-        self.product_function = stochastic_product if stochastic_grad else standard_product
+        self.prod = EstimatedProduct if stochastic_grad else Product
 
     def forward(self, inputs):
         continuous_output = self.continuous_forward(inputs)
@@ -269,7 +290,7 @@ class OriginalConjunctionLayer(nn.Module):
 
     def continuous_forward(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
-        return self.product_function(1 - (1 - inputs).unsqueeze(-1) * self.weights)
+        return self.prod(1 - (1 - inputs).unsqueeze(-1) * self.weights)
 
     @torch.no_grad()
     def binarized_forward(self, inputs):
@@ -290,7 +311,7 @@ class OriginalDisjunctionLayer(nn.Module):
         self.layer_type = 'disjunction'
 
         self.weights = nn.Parameter(0.5 * torch.rand(self.input_shape, n))
-        self.product_function = stochastic_product if stochastic_grad else standard_product
+        self.prod = EstimatedProduct if stochastic_grad else Product
 
     def forward(self, inputs):
         continuous_output = self.continuous_forward(inputs)
@@ -299,7 +320,7 @@ class OriginalDisjunctionLayer(nn.Module):
 
     def continuous_forward(self, inputs):
         inputs = augment_with_negation(inputs, self.use_negation)
-        return 1 - self.product_function(1 - inputs)
+        return 1 - self.prod(1 - inputs)
 
     @torch.no_grad()
     def binarized_forward(self, inputs):
