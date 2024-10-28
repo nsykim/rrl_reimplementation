@@ -91,7 +91,7 @@ class DistributedDataParallel(torch.nn.parallel.DistributedDataParallel):
 
 
 class RRL:
-    def __init__(self, dim_list, device_id, use_not=False, is_rank0=False, log_file=None, writer=None, left=None,
+    def __init__(self, dim_list, device_id, use_not=False, log_file=None, writer=None, left=None,
                  right=None, save_best=False, estimated_grad=False, save_path=None, distributed=True, use_skip=False, 
                  use_nlaf=False, alpha=0.999, beta=8, gamma=1, temperature=0.01):
         self.dim_list = dim_list
@@ -105,7 +105,6 @@ class RRL:
         self.best_loss = 1e20
 
         self.device_id = device_id
-        self.is_rank0 = is_rank0
         self.save_best = save_best
         self.estimated_grad = estimated_grad
         self.save_path = save_path
@@ -115,15 +114,14 @@ class RRL:
         self.net = self._initialize_net(dim_list, use_not, left, right, use_nlaf, estimated_grad, use_skip, alpha, beta, gamma, temperature, distributed)
 
     def _setup_logging(self, log_file):
-        if self.is_rank0:
-            for handler in logging.root.handlers[:]:
-                logging.root.removeHandler(handler)
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
 
-            log_format = '%(asctime)s - [%(levelname)s] - %(message)s'
-            if log_file is None:
-                logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format=log_format)
-            else:
-                logging.basicConfig(level=logging.DEBUG, filename=log_file, filemode='w', format=log_format)
+        log_format = '%(asctime)s - [%(levelname)s] - %(message)s'
+        if log_file is None:
+            logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format=log_format)
+        else:
+            logging.basicConfig(level=logging.DEBUG, filename=log_file, filemode='w', format=log_format)
 
     def _initialize_net(self, dim_list, use_not, left, right, use_nlaf, estimated_grad, use_skip, alpha, beta, gamma, temperature, distributed):
         net = Net(dim_list, use_not=use_not, left=left, right=right, use_nlaf=use_nlaf, estimated_grad=estimated_grad, use_skip=use_skip, alpha=alpha, beta=beta, gamma=gamma, temperature=temperature)
@@ -200,7 +198,7 @@ class RRL:
 
                 cnt += 1
                 with torch.no_grad():
-                    if self.is_rank0 and cnt % log_iter == 0 and cnt != 0 and self.writer is not None:
+                    if cnt % log_iter == 0 and cnt != 0 and self.writer is not None:
                         self.writer.add_scalar('Avg_Batch_Loss_GradGrafting', avg_batch_loss_rrl / log_iter, cnt)
                         edge_p = self.edge_penalty().item()
                         self.writer.add_scalar('Edge_penalty/Log', np.log(edge_p), cnt)
@@ -209,13 +207,12 @@ class RRL:
 
                 optimizer.step()
                 
-                if self.is_rank0:
-                    for param in self.net.parameters():
-                        abs_gradient_max = max(abs_gradient_max, abs(torch.max(param.grad)))
-                        abs_gradient_avg += torch.sum(torch.abs(param.grad)) / param.grad.numel()
+                for param in self.net.parameters():
+                    abs_gradient_max = max(abs_gradient_max, abs(torch.max(param.grad)))
+                    abs_gradient_avg += torch.sum(torch.abs(param.grad)) / param.grad.numel()
                 self.clip()
 
-                if self.is_rank0 and (cnt % (TEST_CNT_MOD * (1 if self.save_best else 10)) == 0):
+                if cnt % (TEST_CNT_MOD * (1 if self.save_best else 10)) == 0:
                     if valid_loader is not None:
                         acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
                     else:
@@ -231,13 +228,12 @@ class RRL:
                     if self.writer is not None:
                         self.writer.add_scalar('Accuracy_RRL', acc_b, cnt // TEST_CNT_MOD)
                         self.writer.add_scalar('F1_Score_RRL', f1_b, cnt // TEST_CNT_MOD)
-            if self.is_rank0:
-                logging.info('epoch: {}, loss_rrl: {}'.format(epo, epoch_loss_rrl))
-                if self.writer is not None:
-                    self.writer.add_scalar('Training_Loss_RRL', epoch_loss_rrl, epo)
-                    self.writer.add_scalar('Abs_Gradient_Max', abs_gradient_max, epo)
-                    self.writer.add_scalar('Abs_Gradient_Avg', abs_gradient_avg / ba_cnt, epo)
-        if self.is_rank0 and not self.save_best:
+            logging.info('epoch: {}, loss_rrl: {}'.format(epo, epoch_loss_rrl))
+            if self.writer is not None:
+                self.writer.add_scalar('Training_Loss_RRL', epoch_loss_rrl, epo)
+                self.writer.add_scalar('Abs_Gradient_Max', abs_gradient_max, epo)
+                self.writer.add_scalar('Abs_Gradient_Avg', abs_gradient_avg / ba_cnt, epo)
+        if not self.save_best:
             self.save_model()
         return epoch_histc
 
