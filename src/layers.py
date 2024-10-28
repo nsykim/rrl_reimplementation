@@ -7,12 +7,6 @@ INIT_RANGE = 0.5
 EPSILON = 1e-10
 INIT_L = 0.0
 
-def augment_with_negation(x, use_negation):
-    """Helper function to handle input augmentation with negation."""
-    if use_negation:
-        return torch.cat((x, 1 - x), dim=1)
-    return x
-
 class Product(torch.autograd.Function):
     """Tensor product function."""
     @staticmethod
@@ -66,16 +60,14 @@ class Binarize(torch.autograd.Function):
         return grad_input
 
 class FeatureBinarizer(nn.Module):
-    def __init__(self, num_bins, input_shape, use_negation=False, min_val=None, max_val=None):
+    def __init__(self, num_bins, input_shape, min_val=None, max_val=None):
         super(FeatureBinarizer, self).__init__()
         self.num_bins = num_bins
         self.input_shape = input_shape
-        self.use_negation = use_negation
         self.discrete_feature_count = input_shape[0]
         self.continuous_feature_count = input_shape[1]
         self.output_dim = self.discrete_feature_count + 2 * num_bins * self.continuous_feature_count
         self.feature_mapping = {i: i for i in range(self.output_dim)}
-        self.discrete_feature_count *= 2 if use_negation else 1
         self.layer_type = 'binarization'
         self.min_val = nn.Parameter(min_val, requires_grad=False) if min_val is not None else None
         self.max_val = nn.Parameter(max_val, requires_grad=False) if max_val is not None else None
@@ -94,12 +86,10 @@ class FeatureBinarizer(nn.Module):
         if self.continuous_feature_count > 0:
             discrete_part, continuous_part = input_data[:, :self.input_shape[0]], input_data[:, self.input_shape[0]:]
             continuous_part = continuous_part.unsqueeze(-1)
-            discrete_part = augment_with_negation(discrete_part, self.use_negation)
             bin_diff = continuous_part - self.bin_centers.t()
             bin_results = Binarize.apply(bin_diff).view(continuous_part.shape[0], -1)
             combined_feats = torch.cat((discrete_part, bin_results, 1. - bin_results), dim=1)
             return combined_feats
-        input_data = augment_with_negation(input_data, self.use_negation)
         
         return input_data
 
@@ -113,9 +103,6 @@ class FeatureBinarizer(nn.Module):
 
     def generate_feature_names(self, feature_names, mean=None, std=None):
         feature_labels = feature_names[:self.input_shape[0]]
-
-        if self.use_negation:
-            feature_labels += ['~' + name for name in feature_names[:self.input_shape[0]]]
 
         if self.continuous_feature_count > 0:
             for center, operator in [(self.bin_centers, '>'), (self.bin_centers, '<=')]:
@@ -192,11 +179,10 @@ class LinearRegressionLayer(nn.Module):
 
 
 class ConjunctionLayer(nn.Module):
-    def __init__(self, num_conjunctions, input_shape, use_negation=False, alpha=0.999, beta=8, gamma=1, stochastic_grad=False):
+    def __init__(self, num_conjunctions, input_shape, alpha=0.999, beta=8, gamma=1, stochastic_grad=False):
         super(ConjunctionLayer, self).__init__()
         self.num_conjunctions = num_conjunctions
-        self.use_negation = use_negation
-        self.input_shape = input_shape * (2 if use_negation else 1)
+        self.input_shape = input_shape
         self.output_dim = num_conjunctions
         self.layer_type = 'conjunction'
 
@@ -214,7 +200,6 @@ class ConjunctionLayer(nn.Module):
         return GradientGraft.apply(binarized_output, continuous_output)
 
     def continuous_forward(self, inputs):
-        inputs = augment_with_negation(inputs, self.use_negation)
 
         inputs = 1.- inputs
         x1 = (1. - 1. / (1. - (inputs * self.alpha) ** self.beta))
@@ -223,7 +208,6 @@ class ConjunctionLayer(nn.Module):
 
     @torch.no_grad()
     def binarized_forward(self, inputs):
-        inputs = augment_with_negation(inputs, self.use_negation)
 
         binary_weights = Binarize.apply(self.weights - THRESHOLD)
         res = (1 - inputs) @ binary_weights
@@ -233,11 +217,10 @@ class ConjunctionLayer(nn.Module):
         self.weights.data.clamp_(INIT_L, 1.0)
 
 class DisjunctionLayer(nn.Module):
-    def __init__(self, num_disjunctions, input_shape, use_negation=False, alpha=0.999, beta=8, gamma=1, stochastic_grad=False):
+    def __init__(self, num_disjunctions, input_shape, alpha=0.999, beta=8, gamma=1, stochastic_grad=False):
         super(DisjunctionLayer, self).__init__()
         self.num_disjunctions = num_disjunctions
-        self.use_negation = use_negation
-        self.input_shape = input_shape * (2 if use_negation else 1)
+        self.input_shape = input_shape 
         self.output_dim = num_disjunctions
         self.layer_type = 'disjunction'
 
@@ -253,14 +236,12 @@ class DisjunctionLayer(nn.Module):
         return GradientGraft.apply(binarized_output, continuous_output)
 
     def continuous_forward(self, inputs):
-        inputs = augment_with_negation(inputs, self.use_negation)
         x1 = (1. - 1. / (1. - (inputs * self.alpha) ** self.beta))
         w1 = (1. - 1. / (1. - (self.weights * self.alpha) ** self.beta))
         return 1. / (1. + x1 @ w1) ** self.gamma
 
     @torch.no_grad()
     def binarized_forward(self, inputs):
-        inputs = augment_with_negation(inputs, self.use_negation)
 
         binary_weights = Binarize.apply(self.weights - THRESHOLD)
         res = inputs @ binary_weights
@@ -270,11 +251,10 @@ class DisjunctionLayer(nn.Module):
         self.weights.data.clamp_(INIT_L, 1.0)
 
 class OriginalConjunctionLayer(nn.Module):
-    def __init__(self, n, input_shape, use_negation=False, stochastic_grad=False):
+    def __init__(self, n, input_shape, stochastic_grad=False):
         super(OriginalConjunctionLayer, self).__init__()
         self.n = n
-        self.use_negation = use_negation
-        self.input_shape = input_shape * (2 if use_negation else 1)
+        self.input_shape = input_shape
         self.output_dim = self.n
         self.layer_type = 'conjunction'
 
@@ -287,12 +267,10 @@ class OriginalConjunctionLayer(nn.Module):
         return GradientGraft.apply(binarized_output, continuous_output)
 
     def continuous_forward(self, inputs):
-        inputs = augment_with_negation(inputs, self.use_negation)
         return self.prod(1 - (1 - inputs).unsqueeze(-1) * self.weights)
 
     @torch.no_grad()
     def binarized_forward(self, inputs):
-        inputs = augment_with_negation(inputs, self.use_negation)
         binarized_weights = Binarize.apply(self.weights - THRESHOLD)
         return torch.prod(1 - (1 - inputs).unsqueeze(-1) * binarized_weights, dim=1)
 
@@ -300,11 +278,10 @@ class OriginalConjunctionLayer(nn.Module):
         self.weights.data.clamp_(0.0, 1.0)
 
 class OriginalDisjunctionLayer(nn.Module):
-    def __init__(self, n, input_shape, use_negation=False, stochastic_grad=False):
+    def __init__(self, n, input_shape, stochastic_grad=False):
         super(OriginalDisjunctionLayer, self).__init__()
         self.n = n
-        self.use_negation = use_negation
-        self.input_shape = input_shape * (2 if use_negation else 1)
+        self.input_shape = input_shape
         self.output_dim = n
         self.layer_type = 'disjunction'
 
@@ -317,12 +294,10 @@ class OriginalDisjunctionLayer(nn.Module):
         return GradientGraft.apply(binarized_output, continuous_output)
 
     def continuous_forward(self, inputs):
-        inputs = augment_with_negation(inputs, self.use_negation)
         return 1 - self.prod.apply(1 - inputs.unsqueeze(-1) * self.weights)
 
     @torch.no_grad()
     def binarized_forward(self, inputs):
-        inputs = augment_with_negation(inputs, self.use_negation)
         binarized_weights = Binarize.apply(self.weights - THRESHOLD)
         return 1 - torch.prod(1 - inputs.unsqueeze(-1) * binarized_weights, dim=1)
 
@@ -370,11 +345,6 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
         for weight_index, weight in enumerate(weights_row):
             # Handling for 'NOT' logic in input dimensions
             negate_input = 1
-            if current_layer.use_negation:
-                if weight_index >= current_layer.input_shape // 2:
-                    negate_input = -1
-                weight_index = weight_index % (current_layer.input_shape // 2)
-
             # Only consider positive weights and valid previous mappings
             if weight > 0 and merged_node_map[weight_index][1] != -1:
                 if previous_layer.layer_type == 'binarization' and weight_index >= previous_layer.discrete_feature_count:
@@ -414,10 +384,9 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
     return dimIDs, rule_list
 
 class UnionLayer(nn.Module):
-    def __init__(self, units, input_shape, use_negation=False, use_novel_activation=False, estimated_grad=False, alpha=0.999, beta=8, gamma=1):
+    def __init__(self, units, input_shape, use_novel_activation=False, estimated_grad=False, alpha=0.999, beta=8, gamma=1):
         super(UnionLayer, self).__init__()
         self.units = units
-        self.use_negation = use_negation
         self.input_shape = input_shape
         self.output_dim = self.units * 2  # Union of conjunction and disjunction
         self.layer_type = 'union'
@@ -427,11 +396,11 @@ class UnionLayer(nn.Module):
         self.dimIDs = None
         
         if use_novel_activation:
-            self.conjunction_layer = ConjunctionLayer(num_conjunctions=units, input_shape=input_shape, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma)
-            self.disjunction_layer = DisjunctionLayer(num_disjunctions=units, input_shape=input_shape, use_negation=use_negation, alpha=alpha, beta=beta, gamma=gamma)
+            self.conjunction_layer = ConjunctionLayer(num_conjunctions=units, input_shape=input_shape, alpha=alpha, beta=beta, gamma=gamma)
+            self.disjunction_layer = DisjunctionLayer(num_disjunctions=units, input_shape=input_shape, alpha=alpha, beta=beta, gamma=gamma)
         else:
-            self.conjunction_layer = OriginalConjunctionLayer(n=units, input_shape=input_shape, use_negation=use_negation, stochastic_grad=estimated_grad)
-            self.disjunction_layer = OriginalDisjunctionLayer(n=units, input_shape=input_shape, use_negation=use_negation, stochastic_grad=estimated_grad)
+            self.conjunction_layer = OriginalConjunctionLayer(n=units, input_shape=input_shape, stochastic_grad=estimated_grad)
+            self.disjunction_layer = OriginalDisjunctionLayer(n=units, input_shape=input_shape, stochastic_grad=estimated_grad)
 
     def forward(self, input_tensor):
         return torch.cat([self.conjunction_layer(input_tensor), self.disjunction_layer(input_tensor)], dim=1)

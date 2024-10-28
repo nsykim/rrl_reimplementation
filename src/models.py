@@ -11,10 +11,9 @@ from src.layers import *
 TEST_CNT_MOD = 500
 
 class Net(nn.Module):
-    def __init__(self, dim_list, use_not=False, left=None, right=None, use_nlaf=False, estimated_grad=False, use_skip=True, alpha=0.999, beta=8, gamma=1, temperature=0.01):
+    def __init__(self, dim_list, left=None, right=None, use_nlaf=False, estimated_grad=False, use_skip=True, alpha=0.999, beta=8, gamma=1, temperature=0.01):
         super(Net, self).__init__()
         self.dim_list = dim_list
-        self.use_not = use_not
         self.left = left
         self.right = right
         self.layer_list = nn.ModuleList([])
@@ -33,14 +32,13 @@ class Net(nn.Module):
                 num += skip_from_layer.output_size
 
             if i == 1:
-                layer = FeatureBinarizer(dim_list[i], num, use_negation=self.use_not, min_val=self.left, max_val=self.right)
+                layer = FeatureBinarizer(dim_list[i], num, min_val=self.left, max_val=self.right)
                 layer_name = f'binary{i}'
             elif i == len(dim_list) - 1:
                 layer = LinearRegressionLayer(dim_list[i], num)
                 layer_name = f'lr{i}'
             else:
-                layer_use_not = i != 2
-                layer = UnionLayer(dim_list[i], num, use_novel_activation=use_nlaf, estimated_grad=estimated_grad, use_negation=layer_use_not, alpha=alpha, beta=beta, gamma=gamma)
+                layer = UnionLayer(dim_list[i], num, use_novel_activation=use_nlaf, estimated_grad=estimated_grad, alpha=alpha, beta=beta, gamma=gamma)
                 layer_name = f'union{i}'
 
             self._set_layer_connections(layer, skip_from_layer)
@@ -91,11 +89,10 @@ class DistributedDataParallel(torch.nn.parallel.DistributedDataParallel):
 
 
 class RRL:
-    def __init__(self, dim_list, device_id, use_not=False, log_file=None, writer=None, left=None,
+    def __init__(self, dim_list, device_id, log_file=None, writer=None, left=None,
                  right=None, save_best=False, estimated_grad=False, save_path=None, distributed=True, use_skip=False, 
                  use_nlaf=False, alpha=0.999, beta=8, gamma=1, temperature=0.01):
         self.dim_list = dim_list
-        self.use_not = use_not
         self.use_skip = use_skip
         self.use_nlaf = use_nlaf
         self.alpha = alpha
@@ -111,7 +108,7 @@ class RRL:
         self.writer = writer
 
         self._setup_logging(log_file)
-        self.net = self._initialize_net(dim_list, use_not, left, right, use_nlaf, estimated_grad, use_skip, alpha, beta, gamma, temperature, distributed)
+        self.net = self._initialize_net(dim_list, left, right, use_nlaf, estimated_grad, use_skip, alpha, beta, gamma, temperature, distributed)
 
     def _setup_logging(self, log_file):
         for handler in logging.root.handlers[:]:
@@ -123,8 +120,8 @@ class RRL:
         else:
             logging.basicConfig(level=logging.DEBUG, filename=log_file, filemode='w', format=log_format)
 
-    def _initialize_net(self, dim_list, use_not, left, right, use_nlaf, estimated_grad, use_skip, alpha, beta, gamma, temperature, distributed):
-        net = Net(dim_list, use_not=use_not, left=left, right=right, use_nlaf=use_nlaf, estimated_grad=estimated_grad, use_skip=use_skip, alpha=alpha, beta=beta, gamma=gamma, temperature=temperature)
+    def _initialize_net(self, dim_list, left, right, use_nlaf, estimated_grad, use_skip, alpha, beta, gamma, temperature, distributed):
+        net = Net(dim_list, left=left, right=right, use_nlaf=use_nlaf, estimated_grad=estimated_grad, use_skip=use_skip, alpha=alpha, beta=beta, gamma=gamma, temperature=temperature)
         net.cuda(self.device_id)
         if distributed:
             net = DistributedDataParallel(net, device_ids=[self.device_id])
@@ -278,7 +275,7 @@ class RRL:
 
     def save_model(self):
         print('Saving model...')
-        rrl_args = {'dim_list': self.dim_list, 'use_not': self.use_not, 'use_skip': self.use_skip, 'estimated_grad': self.estimated_grad, 
+        rrl_args = {'dim_list': self.dim_list, 'use_skip': self.use_skip, 'estimated_grad': self.estimated_grad, 
                     'use_nlaf': self.use_nlaf, 'alpha': self.alpha, 'beta': self.beta, 'gamma': self.gamma}
         torch.save({'model_state_dict': self.net.state_dict(), 'rrl_args': rrl_args}, self.save_path)
 
