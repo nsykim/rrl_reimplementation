@@ -94,7 +94,10 @@ class DBEncoder:
         discrete_data, continuous_data = self.split_data(X_df)
         
         # Label encoding for y
-        y = self.label_enc.transform(y_df) if not self.y_one_hot else self.label_enc.transform(y_df).toarray()
+        if self.y_one_hot:
+            y = self.label_enc.transform(y_df).toarray()
+        else:
+            y = self.label_enc.transform(y_df.values.ravel())
 
         if not continuous_data.empty:
             continuous_data = pd.DataFrame(self.imp.transform(continuous_data), columns=continuous_data.columns)
