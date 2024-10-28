@@ -1,10 +1,22 @@
 import numpy as np
 import pandas as pd
-from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
+from category_encoders import OneHotEncoder as CatEncOneHotEncoder  # Alternative one-hot encoder
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder, StandardScaler
 
 
 def read_info(info_path):
+    """
+    Reads information from a file and processes it into a list of tokens.
+
+    Args:
+        info_path (str): The path to the file containing the information.
+
+    Returns:
+        tuple: A tuple containing:
+            - list: A list of lists, where each inner list contains tokens from each line of the file.
+            - int: The integer value from the last token of the last line in the file.
+    """
     with open(info_path) as f:
         f_list = []
         for line in f:
@@ -14,6 +26,21 @@ def read_info(info_path):
 
 
 def read_csv(data_path, info_path, shuffle=False):
+    """
+    Reads a CSV file and processes it according to the provided information file.
+
+    Args:
+        data_path (str): The path to the CSV data file.
+        info_path (str): The path to the information file that contains feature names and label position.
+        shuffle (bool, optional): If True, shuffles the data. Defaults to False.
+
+    Returns:
+        tuple: A tuple containing:
+            - X_df (pd.DataFrame): DataFrame containing the features.
+            - y_df (pd.DataFrame): DataFrame containing the labels.
+            - f_df (pd.DataFrame): DataFrame containing the feature names.
+            - label_pos (int): The position of the label column.
+    """
     D = pd.read_csv(data_path, header=None)
     if shuffle:
         D = D.sample(frac=1, random_state=0).reset_index(drop=True)
@@ -25,17 +52,52 @@ def read_csv(data_path, info_path, shuffle=False):
     f_df = f_df.drop(f_df.index[label_pos])
     return X_df, y_df, f_df, label_pos
 
-
-import pandas as pd
-import numpy as np
-from sklearn.preprocessing import OneHotEncoder, LabelEncoder, StandardScaler
-from sklearn.impute import SimpleImputer
-from category_encoders import OneHotEncoder as CatEncOneHotEncoder  # Alternative one-hot encoder
-
 class DBEncoder:
-    """Encoder used for data discretization and binarization."""
+    """
+    A class used to encode and preprocess data for machine learning models.
+    Attributes
+    ----------
+    f_df : pd.DataFrame
+        DataFrame containing feature information.
+    discrete : bool, optional
+        Whether to treat discrete features separately (default is False).
+    y_one_hot : bool, optional
+        Whether to one-hot encode the target variable (default is True).
+    drop : str, optional
+        Specifies a column to drop from one-hot encoding (default is 'first').
+    Methods
+    -------
+    split_data(X_df)
+        Splits the input DataFrame into discrete and continuous data.
+    fit(X_df, y_df)
+        Fits the encoder to the input features and target variable.
+    transform(X_df, y_df, normalized=False, keep_stat=False)
+        Transforms the input features and target variable using the fitted encoder.
+    """
 
     def __init__(self, f_df, discrete=False, y_one_hot=True, drop='first'):
+        """
+        Initializes the data processing object.
+        Parameters:
+        f_df (pd.DataFrame): The input dataframe containing features.
+        discrete (bool): Flag indicating if the features are discrete. Default is False.
+        y_one_hot (bool): Flag indicating if the target variable should be one-hot encoded. Default is True.
+        drop (str): Specifies a column to drop when using one-hot encoding. Default is 'first'.
+        Attributes:
+        f_df (pd.DataFrame): The input dataframe containing features.
+        discrete (bool): Indicates if the features are discrete.
+        y_one_hot (bool): Indicates if the target variable is one-hot encoded.
+        label_enc (object): Encoder for the target variable.
+        feature_enc (object): Encoder for the features.
+        imp (SimpleImputer): Imputer for handling missing values.
+        scaler (StandardScaler): Scaler for standardizing features.
+        X_fname (str): Filename for the feature data.
+        y_fname (str): Filename for the target data.
+        discrete_flen (int): Length of discrete features.
+        continuous_flen (int): Length of continuous features.
+        mean (float): Mean of the features.
+        std (float): Standard deviation of the features.
+        """
         self.f_df = f_df
         self.discrete = discrete
         self.y_one_hot = y_one_hot
@@ -53,6 +115,18 @@ class DBEncoder:
         self.std = None
 
     def split_data(self, X_df):
+        """
+        Splits the input DataFrame into discrete and continuous data based on feature types.
+
+        Args:
+            X_df (pd.DataFrame): The input DataFrame containing the data to be split.
+
+        Returns:
+            tuple: A tuple containing two DataFrames:
+                - discrete_data (pd.DataFrame): DataFrame containing the discrete features.
+                - continuous_data (pd.DataFrame): DataFrame containing the continuous features.
+                    Missing values in continuous features are replaced with NaN and converted to numeric type.
+        """
         discrete_data = X_df[self.f_df[self.f_df[1] == 'discrete'].iloc[:, 0]]
         continuous_data = X_df[self.f_df[self.f_df[1] == 'continuous'].iloc[:, 0]]
         if not continuous_data.empty:
@@ -61,6 +135,27 @@ class DBEncoder:
         return discrete_data, continuous_data
 
     def fit(self, X_df, y_df):
+        """
+        Fits the data processing pipeline to the provided feature and target dataframes.
+        Parameters:
+        -----------
+        X_df : pandas.DataFrame
+            The input features dataframe.
+        y_df : pandas.DataFrame
+            The target labels dataframe.
+        Returns:
+        --------
+        None
+        Notes:
+        ------
+        - Resets the index of both X_df and y_df.
+        - Splits the input features into discrete and continuous data.
+        - Fits the label encoder to the target labels.
+        - Fits the imputer to the continuous data if available.
+        - Fits the feature encoder to the discrete data if available.
+        - Sets the feature names for both discrete and continuous data.
+        - Updates the lengths of discrete and continuous feature sets.
+        """
         X_df = X_df.reset_index(drop=True)
         y_df = y_df.reset_index(drop=True)
         discrete_data, continuous_data = self.split_data(X_df)
@@ -89,6 +184,20 @@ class DBEncoder:
         self.continuous_flen = continuous_data.shape[1]
 
     def transform(self, X_df, y_df, normalized=False, keep_stat=False):
+        """
+        Transforms the input dataframes by encoding labels, imputing missing values, 
+        and optionally normalizing continuous features.
+        Parameters:
+        X_df (pd.DataFrame): DataFrame containing the feature data.
+        y_df (pd.DataFrame): DataFrame containing the target labels.
+        normalized (bool, optional): If True, normalizes the continuous features. Default is False.
+        keep_stat (bool, optional): If True, keeps the mean and standard deviation of the continuous features 
+                        for normalization. Default is False.
+        Returns:
+        tuple: A tuple containing:
+            - np.ndarray: Transformed feature data.
+            - np.ndarray: Transformed target labels.
+        """
         X_df = X_df.reset_index(drop=True)
         y_df = y_df.reset_index(drop=True)
         discrete_data, continuous_data = self.split_data(X_df)
@@ -116,77 +225,3 @@ class DBEncoder:
             X_df = continuous_data
 
         return X_df.values, y
-
-
-# 
-# class DBEncoder:
-    # """Encoder used for data discretization and binarization."""
-# 
-    # def __init__(self, f_df, discrete=False, y_one_hot=True, drop='first'):
-        # self.f_df = f_df
-        # self.discrete = discrete
-        # self.y_one_hot = y_one_hot
-        # self.label_enc = preprocessing.OneHotEncoder(categories='auto') if y_one_hot else preprocessing.LabelEncoder()
-        # self.feature_enc = preprocessing.OneHotEncoder(categories='auto', drop=drop)
-        # self.imp = SimpleImputer(missing_values=np.nan, strategy='mean')
-        # self.X_fname = None
-        # self.y_fname = None
-        # self.discrete_flen = None
-        # self.continuous_flen = None
-        # self.mean = None
-        # self.std = None
-# 
-    # def split_data(self, X_df):
-        # discrete_data = X_df[self.f_df.loc[self.f_df[1] == 'discrete', 0]]
-        # continuous_data = X_df[self.f_df.loc[self.f_df[1] == 'continuous', 0]]
-        # if not continuous_data.empty:
-            # continuous_data = continuous_data.replace(to_replace=r'.*\?.*', value=np.nan, regex=True)
-            # continuous_data = continuous_data.astype(np.float)
-        # return discrete_data, continuous_data
-# 
-    # def fit(self, X_df, y_df):
-        # X_df = X_df.reset_index(drop=True)
-        # y_df = y_df.reset_index(drop=True)
-        # discrete_data, continuous_data = self.split_data(X_df)
-        # self.label_enc.fit(y_df)
-        # self.y_fname = list(self.label_enc.get_feature_names_out(y_df.columns)) if self.y_one_hot else y_df.columns
-# 
-        # if not continuous_data.empty:
-            # self.imp.fit(continuous_data.values)
-        # if not discrete_data.empty:
-            # self.feature_enc.fit(discrete_data)
-            # feature_names = discrete_data.columns
-            # self.X_fname = list(self.feature_enc.get_feature_names_out(feature_names))
-            # self.discrete_flen = len(self.X_fname)
-            # if not self.discrete:
-                # self.X_fname.extend(continuous_data.columns)
-        # else:
-            # self.X_fname = continuous_data.columns
-            # self.discrete_flen = 0
-        # self.continuous_flen = continuous_data.shape[1]
-# 
-    # def transform(self, X_df, y_df, normalized=False, keep_stat=False):
-        # X_df = X_df.reset_index(drop=True)
-        # y_df = y_df.reset_index(drop=True)
-        # discrete_data, continuous_data = self.split_data(X_df)
-        # y = self.label_enc.transform(y_df.values.reshape(-1, 1))
-        # if self.y_one_hot:
-            # y = y.toarray()
-# 
-        # if not continuous_data.empty:
-            # continuous_data = pd.DataFrame(self.imp.transform(continuous_data.values),
-                                        #    columns=continuous_data.columns)
-            # if normalized:
-                # if keep_stat:
-                    # self.mean = continuous_data.mean()
-                    # self.std = continuous_data.std()
-                # continuous_data = (continuous_data - self.mean) / self.std
-        # if not discrete_data.empty:
-            # discrete_data = self.feature_enc.transform(discrete_data)
-            # if not self.discrete:
-                # X_df = pd.concat([pd.DataFrame(discrete_data.toarray()), continuous_data], axis=1)
-            # else:
-                # X_df = pd.DataFrame(discrete_data.toarray())
-        # else:
-            # X_df = continuous_data
-        # return X_df.values, y
