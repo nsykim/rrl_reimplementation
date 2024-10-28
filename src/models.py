@@ -29,7 +29,7 @@ class Net(nn.Module):
             skip_from_layer = None
             if self.use_skip and i >= 4:
                 skip_from_layer = self.layer_list[-2]
-                num += skip_from_layer.output_size
+                num += skip_from_layer.output_dim
 
             if i == 1:
                 layer = FeatureBinarizer(dim_list[i], num, min_val=self.left, max_val=self.right)
