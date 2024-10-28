@@ -148,10 +148,8 @@ class DBEncoder:
         # self.y_fname = list(self.label_enc.get_feature_names_out(y_df.columns)) if self.y_one_hot else y_df.columns
 # 
         # if not continuous_data.empty:
-            Use mean as missing value for continuous columns if do not discretize them.
             # self.imp.fit(continuous_data.values)
         # if not discrete_data.empty:
-            One-hot encoding
             # self.feature_enc.fit(discrete_data)
             # feature_names = discrete_data.columns
             # self.X_fname = list(self.feature_enc.get_feature_names_out(feature_names))
@@ -167,13 +165,11 @@ class DBEncoder:
         # X_df = X_df.reset_index(drop=True)
         # y_df = y_df.reset_index(drop=True)
         # discrete_data, continuous_data = self.split_data(X_df)
-        Encode string value to int index.
         # y = self.label_enc.transform(y_df.values.reshape(-1, 1))
         # if self.y_one_hot:
             # y = y.toarray()
 # 
         # if not continuous_data.empty:
-            Use mean as missing value for continuous columns if we do not discretize them.
             # continuous_data = pd.DataFrame(self.imp.transform(continuous_data.values),
                                         #    columns=continuous_data.columns)
             # if normalized:
@@ -182,7 +178,6 @@ class DBEncoder:
                     # self.std = continuous_data.std()
                 # continuous_data = (continuous_data - self.mean) / self.std
         # if not discrete_data.empty:
-            One-hot encoding
             # discrete_data = self.feature_enc.transform(discrete_data)
             # if not self.discrete:
                 # X_df = pd.concat([pd.DataFrame(discrete_data.toarray()), continuous_data], axis=1)
