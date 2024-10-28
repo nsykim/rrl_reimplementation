@@ -91,19 +91,17 @@ class FeatureBinarizer(nn.Module):
         return torch.randn(self.num_bins, self.continuous_feature_count)
 
     def forward(self, input_data):
-        discrete_part, continuous_part = input_data[:, :self.input_shape[0]], input_data[:, self.input_shape[0]:]
-
-        discrete_part = augment_with_negation(discrete_part, self.use_negation)
-
         if self.continuous_feature_count > 0:
+            discrete_part, continuous_part = input_data[:, :self.input_shape[0]], input_data[:, self.input_shape[0]:]
             continuous_part = continuous_part.unsqueeze(-1)
+            discrete_part = augment_with_negation(discrete_part, self.use_negation)
             bin_diff = continuous_part - self.bin_centers.t()
-            binary_results = (bin_diff > 0).float().view(continuous_part.shape[0], -1)
-            binary_neg_results = 1.0 - binary_results
-            combined_features = torch.cat([discrete_part, binary_results, binary_neg_results], dim=1)
-            return combined_features
-
-        return discrete_part
+            bin_results = Binarize.apply(bin_diff).view(continuous_part.shape[0], -1)
+            combined_feats = torch.cat((discrete_part, bin_results, 1. - bin_results), dim=1)
+            return combined_feats
+        input_data = augment_with_negation(input_data, self.use_negation)
+        
+        return input_data
 
     @torch.no_grad()
     def binarized_forward(self, input_data):
