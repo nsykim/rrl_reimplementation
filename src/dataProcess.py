@@ -26,6 +26,12 @@ def read_csv(data_path, info_path, shuffle=False):
     return X_df, y_df, f_df, label_pos
 
 
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+from category_encoders import OneHotEncoder as CatEncOneHotEncoder  # Alternative one-hot encoder
+
 class DBEncoder:
     """Encoder used for data discretization and binarization."""
 
@@ -33,9 +39,12 @@ class DBEncoder:
         self.f_df = f_df
         self.discrete = discrete
         self.y_one_hot = y_one_hot
-        self.label_enc = preprocessing.OneHotEncoder(categories='auto') if y_one_hot else preprocessing.LabelEncoder()
-        self.feature_enc = preprocessing.OneHotEncoder(categories='auto', drop=drop)
+        # Use alternative encoders
+        self.label_enc = CatEncOneHotEncoder() if y_one_hot else LabelEncoder()
+        self.feature_enc = CatEncOneHotEncoder(cols=None, drop_invariant=True) if y_one_hot else OneHotEncoder(drop=drop)
         self.imp = SimpleImputer(missing_values=np.nan, strategy='mean')
+        self.scaler = StandardScaler()
+        
         self.X_fname = None
         self.y_fname = None
         self.discrete_flen = None
@@ -44,61 +53,141 @@ class DBEncoder:
         self.std = None
 
     def split_data(self, X_df):
-        discrete_data = X_df[self.f_df.loc[self.f_df[1] == 'discrete', 0]]
-        continuous_data = X_df[self.f_df.loc[self.f_df[1] == 'continuous', 0]]
+        discrete_data = X_df[self.f_df[self.f_df[1] == 'discrete'].iloc[:, 0]]
+        continuous_data = X_df[self.f_df[self.f_df[1] == 'continuous'].iloc[:, 0]]
         if not continuous_data.empty:
             continuous_data = continuous_data.replace(to_replace=r'.*\?.*', value=np.nan, regex=True)
-            continuous_data = continuous_data.astype(np.float)
+            continuous_data = continuous_data.apply(pd.to_numeric, errors='coerce')
         return discrete_data, continuous_data
 
     def fit(self, X_df, y_df):
         X_df = X_df.reset_index(drop=True)
         y_df = y_df.reset_index(drop=True)
         discrete_data, continuous_data = self.split_data(X_df)
-        self.label_enc.fit(y_df)
-        self.y_fname = list(self.label_enc.get_feature_names_out(y_df.columns)) if self.y_one_hot else y_df.columns
+        
+        if self.y_one_hot:
+            self.label_enc.fit(y_df)
+            self.y_fname = self.label_enc.get_feature_names() if hasattr(self.label_enc, 'get_feature_names') else y_df.columns
+        else:
+            self.label_enc.fit(y_df.values.ravel())
+            self.y_fname = y_df.columns
 
         if not continuous_data.empty:
-            # Use mean as missing value for continuous columns if do not discretize them.
-            self.imp.fit(continuous_data.values)
+            self.imp.fit(continuous_data)
+        
         if not discrete_data.empty:
-            # One-hot encoding
             self.feature_enc.fit(discrete_data)
             feature_names = discrete_data.columns
-            self.X_fname = list(self.feature_enc.get_feature_names_out(feature_names))
+            self.X_fname = list(self.feature_enc.get_feature_names()) if hasattr(self.feature_enc, 'get_feature_names') else feature_names.tolist()
             self.discrete_flen = len(self.X_fname)
             if not self.discrete:
                 self.X_fname.extend(continuous_data.columns)
         else:
-            self.X_fname = continuous_data.columns
+            self.X_fname = continuous_data.columns.tolist()
             self.discrete_flen = 0
+
         self.continuous_flen = continuous_data.shape[1]
 
     def transform(self, X_df, y_df, normalized=False, keep_stat=False):
         X_df = X_df.reset_index(drop=True)
         y_df = y_df.reset_index(drop=True)
         discrete_data, continuous_data = self.split_data(X_df)
-        # Encode string value to int index.
-        y = self.label_enc.transform(y_df.values.reshape(-1, 1))
-        if self.y_one_hot:
-            y = y.toarray()
+        
+        # Label encoding for y
+        y = self.label_enc.transform(y_df) if not self.y_one_hot else self.label_enc.transform(y_df).toarray()
 
         if not continuous_data.empty:
-            # Use mean as missing value for continuous columns if we do not discretize them.
-            continuous_data = pd.DataFrame(self.imp.transform(continuous_data.values),
-                                           columns=continuous_data.columns)
+            continuous_data = pd.DataFrame(self.imp.transform(continuous_data), columns=continuous_data.columns)
             if normalized:
                 if keep_stat:
                     self.mean = continuous_data.mean()
                     self.std = continuous_data.std()
-                continuous_data = (continuous_data - self.mean) / self.std
+                continuous_data = pd.DataFrame(self.scaler.fit_transform(continuous_data), columns=continuous_data.columns)
+
         if not discrete_data.empty:
-            # One-hot encoding
-            discrete_data = self.feature_enc.transform(discrete_data)
-            if not self.discrete:
-                X_df = pd.concat([pd.DataFrame(discrete_data.toarray()), continuous_data], axis=1)
-            else:
-                X_df = pd.DataFrame(discrete_data.toarray())
+            discrete_data_encoded = self.feature_enc.transform(discrete_data)
+            discrete_data_encoded = pd.DataFrame(discrete_data_encoded, columns=self.X_fname[:self.discrete_flen])
+            X_df = pd.concat([discrete_data_encoded, continuous_data], axis=1) if not self.discrete else discrete_data_encoded
         else:
             X_df = continuous_data
+
         return X_df.values, y
+
+
+# 
+# class DBEncoder:
+    # """Encoder used for data discretization and binarization."""
+# 
+    # def __init__(self, f_df, discrete=False, y_one_hot=True, drop='first'):
+        # self.f_df = f_df
+        # self.discrete = discrete
+        # self.y_one_hot = y_one_hot
+        # self.label_enc = preprocessing.OneHotEncoder(categories='auto') if y_one_hot else preprocessing.LabelEncoder()
+        # self.feature_enc = preprocessing.OneHotEncoder(categories='auto', drop=drop)
+        # self.imp = SimpleImputer(missing_values=np.nan, strategy='mean')
+        # self.X_fname = None
+        # self.y_fname = None
+        # self.discrete_flen = None
+        # self.continuous_flen = None
+        # self.mean = None
+        # self.std = None
+# 
+    # def split_data(self, X_df):
+        # discrete_data = X_df[self.f_df.loc[self.f_df[1] == 'discrete', 0]]
+        # continuous_data = X_df[self.f_df.loc[self.f_df[1] == 'continuous', 0]]
+        # if not continuous_data.empty:
+            # continuous_data = continuous_data.replace(to_replace=r'.*\?.*', value=np.nan, regex=True)
+            # continuous_data = continuous_data.astype(np.float)
+        # return discrete_data, continuous_data
+# 
+    # def fit(self, X_df, y_df):
+        # X_df = X_df.reset_index(drop=True)
+        # y_df = y_df.reset_index(drop=True)
+        # discrete_data, continuous_data = self.split_data(X_df)
+        # self.label_enc.fit(y_df)
+        # self.y_fname = list(self.label_enc.get_feature_names_out(y_df.columns)) if self.y_one_hot else y_df.columns
+# 
+        # if not continuous_data.empty:
+            Use mean as missing value for continuous columns if do not discretize them.
+            # self.imp.fit(continuous_data.values)
+        # if not discrete_data.empty:
+            One-hot encoding
+            # self.feature_enc.fit(discrete_data)
+            # feature_names = discrete_data.columns
+            # self.X_fname = list(self.feature_enc.get_feature_names_out(feature_names))
+            # self.discrete_flen = len(self.X_fname)
+            # if not self.discrete:
+                # self.X_fname.extend(continuous_data.columns)
+        # else:
+            # self.X_fname = continuous_data.columns
+            # self.discrete_flen = 0
+        # self.continuous_flen = continuous_data.shape[1]
+# 
+    # def transform(self, X_df, y_df, normalized=False, keep_stat=False):
+        # X_df = X_df.reset_index(drop=True)
+        # y_df = y_df.reset_index(drop=True)
+        # discrete_data, continuous_data = self.split_data(X_df)
+        Encode string value to int index.
+        # y = self.label_enc.transform(y_df.values.reshape(-1, 1))
+        # if self.y_one_hot:
+            # y = y.toarray()
+# 
+        # if not continuous_data.empty:
+            Use mean as missing value for continuous columns if we do not discretize them.
+            # continuous_data = pd.DataFrame(self.imp.transform(continuous_data.values),
+                                        #    columns=continuous_data.columns)
+            # if normalized:
+                # if keep_stat:
+                    # self.mean = continuous_data.mean()
+                    # self.std = continuous_data.std()
+                # continuous_data = (continuous_data - self.mean) / self.std
+        # if not discrete_data.empty:
+            One-hot encoding
+            # discrete_data = self.feature_enc.transform(discrete_data)
+            # if not self.discrete:
+                # X_df = pd.concat([pd.DataFrame(discrete_data.toarray()), continuous_data], axis=1)
+            # else:
+                # X_df = pd.DataFrame(discrete_data.toarray())
+        # else:
+            # X_df = continuous_data
+        # return X_df.values, y
