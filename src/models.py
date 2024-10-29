@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from collections import defaultdict
 from sklearn import metrics
+from torch.optim import lr_scheduler
 import logging
 import sys
 import numpy as np
@@ -87,12 +88,26 @@ class DistributedDataParallel(torch.nn.parallel.DistributedDataParallel):
     def t(self):
         return self.module.t
 
+import torch
+import torch.nn as nn
+import numpy as np
+import logging
+import sys
+from collections import defaultdict
+from torch.optim import lr_scheduler
+from sklearn import metrics
 
 class RRL:
     def __init__(self, dim_list, device_id, log_file=None, writer=None, left=None,
                  right=None, save_best=False, estimated_grad=False, save_path=None, distributed=True, use_skip=False, 
                  use_nlaf=False, alpha=0.999, beta=8, gamma=1, temperature=0.01):
         self.dim_list = dim_list
+        self.device_id = device_id
+        self.writer = writer
+        self.temperature = temperature
+        self.save_best = save_best
+        self.estimated_grad = estimated_grad
+        self.save_path = save_path
         self.use_skip = use_skip
         self.use_nlaf = use_nlaf
         self.alpha = alpha
@@ -101,177 +116,97 @@ class RRL:
         self.best_f1 = -1.
         self.best_loss = 1e20
 
-        self.device_id = device_id
-        self.save_best = save_best
-        self.estimated_grad = estimated_grad
-        self.save_path = save_path
-        self.writer = writer
-
+        # Set up logging and network initialization
         self._setup_logging(log_file)
-        self.net = self._initialize_net(dim_list, left, right, use_nlaf, estimated_grad, use_skip, alpha, beta, gamma, temperature, distributed)
+        self.net = self._alternative_initialize_net(dim_list, distributed)
 
     def _setup_logging(self, log_file):
-        for handler in logging.root.handlers[:]:
-            logging.root.removeHandler(handler)
+        logging.basicConfig(level=logging.DEBUG, filename=log_file if log_file else sys.stdout,
+                            filemode='w' if log_file else None,
+                            format='%(asctime)s - [%(levelname)s] - %(message)s')
 
-        log_format = '%(asctime)s - [%(levelname)s] - %(message)s'
-        if log_file is None:
-            logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format=log_format)
-        else:
-            logging.basicConfig(level=logging.DEBUG, filename=log_file, filemode='w', format=log_format)
-
-    def _initialize_net(self, dim_list, left, right, use_nlaf, estimated_grad, use_skip, alpha, beta, gamma, temperature, distributed):
-        net = Net(dim_list, left=left, right=right, use_nlaf=use_nlaf, estimated_grad=estimated_grad, use_skip=use_skip, alpha=alpha, beta=beta, gamma=gamma, temperature=temperature)
-        net.cuda(self.device_id)
+    def _alternative_initialize_net(self, dim_list, distributed):
+        # Alternative net initialization process
+        net = Net(dim_list, use_skip=self.use_skip, use_nlaf=self.use_nlaf,
+                  alpha=self.alpha, beta=self.beta, gamma=self.gamma, temperature=self.temperature)
+        net.to(self.device_id)
         if distributed:
-            net = DistributedDataParallel(net, device_ids=[self.device_id])
+            net = torch.nn.parallel.DistributedDataParallel(net, device_ids=[self.device_id])
         return net
 
     def clip(self):
         for layer in self.net.layer_list[:-1]:
-            layer.clip_weights()
-    
-    def edge_penalty(self):
-        return sum(layer.edge_count() for layer in self.net.layer_list[1:-1])
+            layer.weights.clamp_(min=-1.0, max=1.0)  # An alternative clipping approach
 
-    
+    def edge_penalty(self):
+        # Alternative edge penalty calculation
+        return sum(layer.edge_count() * self.beta for layer in self.net.layer_list[1:-1])
+
     def l1_penalty(self):
-        return sum(layer.compute_l1_norm() for layer in self.net.layer_list[1:])
-    
+        return sum(layer.compute_l1_norm() * self.alpha for layer in self.net.layer_list[1:])
+
     def l2_penalty(self):
-        return sum(layer.compute_l2_norm() for layer in self.net.layer_list[1:])
-    
+        return sum(layer.compute_l2_norm() * self.gamma for layer in self.net.layer_list[1:])
+
     def mixed_penalty(self):
-        penalty = sum(layer.compute_l2_norm() for layer in self.net.layer_list[1:-1])
-        penalty += self.net.layer_list[-1].compute_l1_norm()
+        # Alternative mixed penalty implementation
+        penalty = sum(layer.compute_l2_norm() * self.gamma for layer in self.net.layer_list[1:-1])
+        penalty += self.net.layer_list[-1].compute_l1_norm() * self.alpha
         return penalty
 
     @staticmethod
     def exp_lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_rate=0.9, lr_decay_epoch=7):
-        lr = init_lr * (lr_decay_rate ** (epoch // lr_decay_epoch))
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
+        # Alternative learning rate scheduling using torch's built-in scheduler
+        scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=lr_decay_rate)
+        scheduler.step(epoch // lr_decay_epoch)
         return optimizer
 
     def train_model(self, data_loader=None, valid_loader=None, epoch=50, lr=0.01, lr_decay_epoch=100, 
                     lr_decay_rate=0.75, weight_decay=0.0, log_iter=50):
-
-        if data_loader is None:
-            raise Exception("Data loader is unavailable!")
-
-        accuracy_b = []
-        f1_score_b = []
-
-        criterion = nn.CrossEntropyLoss().cuda(self.device_id)
-        optimizer = torch.optim.Adam(self.net.parameters(), lr=lr, weight_decay=0.0)
-
-        cnt = -1
-        avg_batch_loss_rrl = 0.0
-        epoch_histc = defaultdict(list)
+        if not data_loader:
+            raise ValueError("Data loader is required for training.")
+        
+        criterion = nn.CrossEntropyLoss().to(self.device_id)
+        optimizer = torch.optim.SGD(self.net.parameters(), lr=lr, weight_decay=weight_decay)
+        
+        # Training loop with alternative gradient logging and checkpointing
         for epo in range(epoch):
+            epoch_loss = 0
             optimizer = self.exp_lr_scheduler(optimizer, epo, init_lr=lr, lr_decay_rate=lr_decay_rate, lr_decay_epoch=lr_decay_epoch)
-
-            epoch_loss_rrl = 0.0
-            abs_gradient_max = 0.0
-            abs_gradient_avg = 0.0
-
-            ba_cnt = 0
-            for X, y in data_loader:
-                ba_cnt += 1
-                X = X.cuda(self.device_id, non_blocking=True)
-                y = y.cuda(self.device_id, non_blocking=True)
+            for i, (X, y) in enumerate(data_loader):
+                X, y = X.to(self.device_id), y.to(self.device_id)
                 optimizer.zero_grad()
                 
-                y_bar = self.net.forward(X) / torch.exp(self.net.t)
-                y_arg = torch.argmax(y, dim=1)
+                # Alternative model forward pass
+                output = self.net(X)
+                loss = criterion(output, y) + self.l2_penalty()
                 
-                loss_rrl = criterion(y_bar, y_arg) + weight_decay * self.l2_penalty()
-                
-                ba_loss_rrl = loss_rrl.item()
-                epoch_loss_rrl += ba_loss_rrl
-                avg_batch_loss_rrl += ba_loss_rrl
-                
-                loss_rrl.backward()
-
-                cnt += 1
-                with torch.no_grad():
-                    if cnt % log_iter == 0 and cnt != 0 and self.writer is not None:
-                        self.writer.add_scalar('Avg_Batch_Loss_GradGrafting', avg_batch_loss_rrl / log_iter, cnt)
-                        edge_p = self.edge_penalty().item()
-                        self.writer.add_scalar('Edge_penalty/Log', np.log(edge_p), cnt)
-                        self.writer.add_scalar('Edge_penalty/Origin', edge_p, cnt)
-                        avg_batch_loss_rrl = 0.0
-
+                loss.backward()
                 optimizer.step()
+                epoch_loss += loss.item()
                 
-                for param in self.net.parameters():
-                    abs_gradient_max = max(abs_gradient_max, abs(torch.max(param.grad)))
-                    abs_gradient_avg += torch.sum(torch.abs(param.grad)) / param.grad.numel()
-                self.clip()
-
-                if cnt % (TEST_CNT_MOD * (1 if self.save_best else 10)) == 0:
-                    if valid_loader is not None:
-                        acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
-                    else:
-                        acc_b, f1_b = self.test(test_loader=data_loader, set_name='Training')
-                    
-                    if self.save_best and (f1_b > self.best_f1 or (np.abs(f1_b - self.best_f1) < 1e-10 and self.best_loss > epoch_loss_rrl)):
-                        self.best_f1 = f1_b
-                        self.best_loss = epoch_loss_rrl
-                        self.save_model()
-                    
-                    accuracy_b.append(acc_b)
-                    f1_score_b.append(f1_b)
-                    if self.writer is not None:
-                        self.writer.add_scalar('Accuracy_RRL', acc_b, cnt // TEST_CNT_MOD)
-                        self.writer.add_scalar('F1_Score_RRL', f1_b, cnt // TEST_CNT_MOD)
-            logging.info('epoch: {}, loss_rrl: {}'.format(epo, epoch_loss_rrl))
-            if self.writer is not None:
-                self.writer.add_scalar('Training_Loss_RRL', epoch_loss_rrl, epo)
-                self.writer.add_scalar('Abs_Gradient_Max', abs_gradient_max, epo)
-                self.writer.add_scalar('Abs_Gradient_Avg', abs_gradient_avg / ba_cnt, epo)
-        if not self.save_best:
-            self.save_model()
-        return epoch_histc
+                if i % log_iter == 0 and self.writer:
+                    self.writer.add_scalar('Loss/train', epoch_loss / log_iter, epo * len(data_loader) + i)
+            logging.info(f'Epoch {epo}, Loss: {epoch_loss / len(data_loader)}')
+            self.clip()
 
     @torch.no_grad()
     def test(self, test_loader=None, set_name='Validation'):
-        if test_loader is None:
-            raise Exception("Data loader is unavailable!")
+        if not test_loader:
+            raise ValueError("Data loader is required for testing.")
         
-        y_list = []
+        y_true, y_pred = [], []
         for X, y in test_loader:
-            y_list.append(y)
-        y_true = torch.cat(y_list, dim=0)
-        y_true = y_true.cpu().numpy().astype(np.int64)
-        y_true = np.argmax(y_true, axis=1)
-        data_num = y_true.shape[0]
-
-        slice_step = data_num // 40 if data_num >= 40 else 1
-        logging.debug('y_true: {} {}'.format(y_true.shape, y_true[:: slice_step]))
-
-        y_pred_b_list = []
-        for X, y in test_loader:
-            X = X.cuda(self.device_id, non_blocking=True)
-            output = self.net.forward(X)
-            y_pred_b_list.append(output)
-
-        y_pred_b = torch.cat(y_pred_b_list).cpu().numpy()
-        y_pred_b_arg = np.argmax(y_pred_b, axis=1)
-        logging.debug('y_rrl_: {} {}'.format(y_pred_b_arg.shape, y_pred_b_arg[:: slice_step]))
-        logging.debug('y_rrl: {} {}'.format(y_pred_b.shape, y_pred_b[:: (slice_step)]))
-
-        accuracy_b = metrics.accuracy_score(y_true, y_pred_b_arg)
-        f1_score_b = metrics.f1_score(y_true, y_pred_b_arg, average='macro')
-
-        logging.info('-' * 60)
-        logging.info('On {} Set:\n\tAccuracy of RRL  Model: {}'
-                        '\n\tF1 Score of RRL  Model: {}'.format(set_name, accuracy_b, f1_score_b))
-        logging.info('On {} Set:\nPerformance of  RRL Model: \n{}\n{}'.format(
-            set_name, metrics.confusion_matrix(y_true, y_pred_b_arg), metrics.classification_report(y_true, y_pred_b_arg)))
-        logging.info('-' * 60)
-
-        return accuracy_b, f1_score_b
+            X, y = X.to(self.device_id), y.to(self.device_id)
+            output = self.net(X)
+            y_true.extend(y.cpu().numpy())
+            y_pred.extend(output.argmax(dim=1).cpu().numpy())
+        
+        accuracy = metrics.accuracy_score(y_true, y_pred)
+        f1 = metrics.f1_score(y_true, y_pred, average='macro')
+        
+        logging.info(f'{set_name} Set - Accuracy: {accuracy}, F1 Score: {f1}')
+        return accuracy, f1
 
     def save_model(self):
         print('Saving model...')
@@ -300,11 +235,6 @@ class RRL:
 
         for i in range(1, len(self.net.layer_list) - 1):
             layer = self.net.layer_list[i]
-            layer.get_rules(layer.conn.prev_layer, layer.conn.skip_from_layer)
-            skip_rule_name = None if layer.conn.skip_from_layer is None else layer.conn.skip_from_layer.rule_name
-            wrap_prev_rule = i != 1
-            layer.get_rule_description((skip_rule_name, layer.conn.prev_layer.rule_name), wrap=wrap_prev_rule)
-
         layer = self.net.layer_list[-1]
         layer.calculate_rule_weights(layer.conn.prev_layer, layer.conn.skip_from_layer)
         
@@ -325,3 +255,241 @@ class RRL:
             print(now_layer.rule_name[rid[1]], end='\n', file=file)
         print('#' * 60, file=file)
         return layer.rule2weights
+
+# class RRL:
+#     def __init__(self, dim_list, device_id, log_file=None, writer=None, left=None,
+#                  right=None, save_best=False, estimated_grad=False, save_path=None, distributed=True, use_skip=False, 
+#                  use_nlaf=False, alpha=0.999, beta=8, gamma=1, temperature=0.01):
+#         self.dim_list = dim_list
+#         self.use_skip = use_skip
+#         self.use_nlaf = use_nlaf
+#         self.alpha = alpha
+#         self.beta = beta
+#         self.gamma = gamma
+#         self.best_f1 = -1.
+#         self.best_loss = 1e20
+
+#         self.device_id = device_id
+#         self.save_best = save_best
+#         self.estimated_grad = estimated_grad
+#         self.save_path = save_path
+#         self.writer = writer
+
+#         self._setup_logging(log_file)
+#         self.net = self._initialize_net(dim_list, left, right, use_nlaf, estimated_grad, use_skip, alpha, beta, gamma, temperature, distributed)
+
+#     def _setup_logging(self, log_file):
+#         for handler in logging.root.handlers[:]:
+#             logging.root.removeHandler(handler)
+
+#         log_format = '%(asctime)s - [%(levelname)s] - %(message)s'
+#         if log_file is None:
+#             logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format=log_format)
+#         else:
+#             logging.basicConfig(level=logging.DEBUG, filename=log_file, filemode='w', format=log_format)
+
+#     def _initialize_net(self, dim_list, left, right, use_nlaf, estimated_grad, use_skip, alpha, beta, gamma, temperature, distributed):
+#         net = Net(dim_list, left=left, right=right, use_nlaf=use_nlaf, estimated_grad=estimated_grad, use_skip=use_skip, alpha=alpha, beta=beta, gamma=gamma, temperature=temperature)
+#         net.cuda(self.device_id)
+#         if distributed:
+#             net = DistributedDataParallel(net, device_ids=[self.device_id])
+#         return net
+
+#     def clip(self):
+#         for layer in self.net.layer_list[:-1]:
+#             layer.clip_weights()
+    
+#     def edge_penalty(self):
+#         return sum(layer.edge_count() for layer in self.net.layer_list[1:-1])
+
+    
+#     def l1_penalty(self):
+#         return sum(layer.compute_l1_norm() for layer in self.net.layer_list[1:])
+    
+#     def l2_penalty(self):
+#         return sum(layer.compute_l2_norm() for layer in self.net.layer_list[1:])
+    
+#     def mixed_penalty(self):
+#         penalty = sum(layer.compute_l2_norm() for layer in self.net.layer_list[1:-1])
+#         penalty += self.net.layer_list[-1].compute_l1_norm()
+#         return penalty
+
+#     @staticmethod
+#     def exp_lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_rate=0.9, lr_decay_epoch=7):
+#         lr = init_lr * (lr_decay_rate ** (epoch // lr_decay_epoch))
+#         for param_group in optimizer.param_groups:
+#             param_group['lr'] = lr
+#         return optimizer
+
+#     def train_model(self, data_loader=None, valid_loader=None, epoch=50, lr=0.01, lr_decay_epoch=100, 
+#                     lr_decay_rate=0.75, weight_decay=0.0, log_iter=50):
+
+#         if data_loader is None:
+#             raise Exception("Data loader is unavailable!")
+
+#         accuracy_b = []
+#         f1_score_b = []
+
+#         criterion = nn.CrossEntropyLoss().cuda(self.device_id)
+#         optimizer = torch.optim.Adam(self.net.parameters(), lr=lr, weight_decay=0.0)
+
+#         cnt = -1
+#         avg_batch_loss_rrl = 0.0
+#         epoch_histc = defaultdict(list)
+#         for epo in range(epoch):
+#             optimizer = self.exp_lr_scheduler(optimizer, epo, init_lr=lr, lr_decay_rate=lr_decay_rate, lr_decay_epoch=lr_decay_epoch)
+
+#             epoch_loss_rrl = 0.0
+#             abs_gradient_max = 0.0
+#             abs_gradient_avg = 0.0
+
+#             ba_cnt = 0
+#             for X, y in data_loader:
+#                 ba_cnt += 1
+#                 X = X.cuda(self.device_id, non_blocking=True)
+#                 y = y.cuda(self.device_id, non_blocking=True)
+#                 optimizer.zero_grad()
+                
+#                 y_bar = self.net.forward(X) / torch.exp(self.net.t)
+#                 y_arg = torch.argmax(y, dim=1)
+                
+#                 loss_rrl = criterion(y_bar, y_arg) + weight_decay * self.l2_penalty()
+                
+#                 ba_loss_rrl = loss_rrl.item()
+#                 epoch_loss_rrl += ba_loss_rrl
+#                 avg_batch_loss_rrl += ba_loss_rrl
+                
+#                 loss_rrl.backward()
+
+#                 cnt += 1
+#                 with torch.no_grad():
+#                     if cnt % log_iter == 0 and cnt != 0 and self.writer is not None:
+#                         self.writer.add_scalar('Avg_Batch_Loss_GradGrafting', avg_batch_loss_rrl / log_iter, cnt)
+#                         edge_p = self.edge_penalty().item()
+#                         self.writer.add_scalar('Edge_penalty/Log', np.log(edge_p), cnt)
+#                         self.writer.add_scalar('Edge_penalty/Origin', edge_p, cnt)
+#                         avg_batch_loss_rrl = 0.0
+
+#                 optimizer.step()
+                
+#                 for param in self.net.parameters():
+#                     abs_gradient_max = max(abs_gradient_max, abs(torch.max(param.grad)))
+#                     abs_gradient_avg += torch.sum(torch.abs(param.grad)) / param.grad.numel()
+#                 self.clip()
+
+#                 if cnt % (TEST_CNT_MOD * (1 if self.save_best else 10)) == 0:
+#                     if valid_loader is not None:
+#                         acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
+#                     else:
+#                         acc_b, f1_b = self.test(test_loader=data_loader, set_name='Training')
+                    
+#                     if self.save_best and (f1_b > self.best_f1 or (np.abs(f1_b - self.best_f1) < 1e-10 and self.best_loss > epoch_loss_rrl)):
+#                         self.best_f1 = f1_b
+#                         self.best_loss = epoch_loss_rrl
+#                         self.save_model()
+                    
+#                     accuracy_b.append(acc_b)
+#                     f1_score_b.append(f1_b)
+#                     if self.writer is not None:
+#                         self.writer.add_scalar('Accuracy_RRL', acc_b, cnt // TEST_CNT_MOD)
+#                         self.writer.add_scalar('F1_Score_RRL', f1_b, cnt // TEST_CNT_MOD)
+#             logging.info('epoch: {}, loss_rrl: {}'.format(epo, epoch_loss_rrl))
+#             if self.writer is not None:
+#                 self.writer.add_scalar('Training_Loss_RRL', epoch_loss_rrl, epo)
+#                 self.writer.add_scalar('Abs_Gradient_Max', abs_gradient_max, epo)
+#                 self.writer.add_scalar('Abs_Gradient_Avg', abs_gradient_avg / ba_cnt, epo)
+#         if not self.save_best:
+#             self.save_model()
+#         return epoch_histc
+
+#     @torch.no_grad()
+#     def test(self, test_loader=None, set_name='Validation'):
+#         if test_loader is None:
+#             raise Exception("Data loader is unavailable!")
+        
+#         y_list = []
+#         for X, y in test_loader:
+#             y_list.append(y)
+#         y_true = torch.cat(y_list, dim=0)
+#         y_true = y_true.cpu().numpy().astype(np.int64)
+#         y_true = np.argmax(y_true, axis=1)
+#         data_num = y_true.shape[0]
+
+#         slice_step = data_num // 40 if data_num >= 40 else 1
+#         logging.debug('y_true: {} {}'.format(y_true.shape, y_true[:: slice_step]))
+
+#         y_pred_b_list = []
+#         for X, y in test_loader:
+#             X = X.cuda(self.device_id, non_blocking=True)
+#             output = self.net.forward(X)
+#             y_pred_b_list.append(output)
+
+#         y_pred_b = torch.cat(y_pred_b_list).cpu().numpy()
+#         y_pred_b_arg = np.argmax(y_pred_b, axis=1)
+#         logging.debug('y_rrl_: {} {}'.format(y_pred_b_arg.shape, y_pred_b_arg[:: slice_step]))
+#         logging.debug('y_rrl: {} {}'.format(y_pred_b.shape, y_pred_b[:: (slice_step)]))
+
+#         accuracy_b = metrics.accuracy_score(y_true, y_pred_b_arg)
+#         f1_score_b = metrics.f1_score(y_true, y_pred_b_arg, average='macro')
+
+#         logging.info('-' * 60)
+#         logging.info('On {} Set:\n\tAccuracy of RRL  Model: {}'
+#                         '\n\tF1 Score of RRL  Model: {}'.format(set_name, accuracy_b, f1_score_b))
+#         logging.info('On {} Set:\nPerformance of  RRL Model: \n{}\n{}'.format(
+#             set_name, metrics.confusion_matrix(y_true, y_pred_b_arg), metrics.classification_report(y_true, y_pred_b_arg)))
+#         logging.info('-' * 60)
+
+#         return accuracy_b, f1_score_b
+
+
+#             layer.get_rules(layer.conn.prev_layer, layer.conn.skip_from_layer)
+#             skip_rule_name = None if layer.conn.skip_from_layer is None else layer.conn.skip_from_layer.rule_name
+#             wrap_prev_rule = i != 1
+#             layer.get_rule_description((skip_rule_name, layer.conn.prev_layer.rule_name), wrap=wrap_prev_rule)
+#     def save_model(self):
+#         print('Saving model...')
+#         rrl_args = {'dim_list': self.dim_list, 'use_skip': self.use_skip, 'estimated_grad': self.estimated_grad, 
+#                     'use_nlaf': self.use_nlaf, 'alpha': self.alpha, 'beta': self.beta, 'gamma': self.gamma}
+#         torch.save({'model_state_dict': self.net.state_dict(), 'rrl_args': rrl_args}, self.save_path)
+
+#     def detect_dead_node(self, data_loader=None):
+#         with torch.no_grad():
+#             for layer in self.net.layer_list[:-1]:
+#                 layer.activation_nodes = torch.zeros(layer.output_dim, dtype=torch.double, device=self.device_id)
+#                 layer.forward_tot = 0
+
+#             for x, y in data_loader:
+#                 x_bar = x.cuda(self.device_id)
+#                 self.net.binarized_forward(x_bar, count=True)
+
+#     def rule_print(self, feature_name, label_name, train_loader, file=sys.stdout, mean=None, std=None, display=True):
+#         if self.net.layer_list[1] is None and train_loader is None:
+#             raise Exception("Need train_loader for the dead nodes detection.")
+
+#         if self.net.layer_list[1].activation_nodes is None:
+#             self.detect_dead_node(train_loader)
+
+#         self.net.layer_list[0].generate_feature_names(feature_name, mean, std)
+
+#         for i in range(1, len(self.net.layer_list) - 1):
+#             layer = self.net.layer_list[i]
+#         layer = self.net.layer_list[-1]
+#         layer.calculate_rule_weights(layer.conn.prev_layer, layer.conn.skip_from_layer)
+        
+#         if not display:
+#             return layer.rule2weights
+        
+#         print('RID', end='\t', file=file)
+#         for i, ln in enumerate(label_name):
+#             print('{}(b={:.4f})'.format(ln, layer.bl[i]), end='\t', file=file)
+#         print('Support\tRule', file=file)
+#         for rid, w in layer.rule2weights:
+#             print(rid, end='\t', file=file)
+#             for li in range(len(label_name)):
+#                 print('{:.4f}'.format(w[li]), end='\t', file=file)
+#             now_layer = self.net.layer_list[-1 + rid[0]]
+#             print('{:.4f}'.format((now_layer.activation_nodes[layer.rid2dim[rid]] / now_layer.forward_tot).item()),
+#                   end='\t', file=file)
+#             print(now_layer.rule_name[rid[1]], end='\n', file=file)
+#         print('#' * 60, file=file)
+#         return layer.rule2weights
