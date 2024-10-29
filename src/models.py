@@ -110,6 +110,8 @@ class RRL:
         self.save_path = save_path
         self.use_skip = use_skip
         self.use_nlaf = use_nlaf
+        self.left =  left
+        self.right = right
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
@@ -118,8 +120,7 @@ class RRL:
 
         # Set up logging and network initialization
         self._setup_logging(log_file)
-        self.net = self._alternative_initialize_net(dim_list, left, right, use_nlaf, estimated_grad, 
-                        use_skip, alpha, beta, gamma, temperature, distributed)
+        self.net = self._initialize_net(dim_list, dim_list, distributed)
 
 
     def _setup_logging(self, log_file):
@@ -127,9 +128,9 @@ class RRL:
                             filemode='w' if log_file else None,
                             format='%(asctime)s - [%(levelname)s] - %(message)s')
 
-    def _alternative_initialize_net(self, dim_list, distributed):
+    def _initialize_net(self, dim_list, distributed):
         # Alternative net initialization process
-        net = Net(dim_list, use_skip=self.use_skip, use_nlaf=self.use_nlaf,
+        net = Net(dim_list, use_skip=self.use_skip, use_nlaf=self.use_nlaf, right=self.right, left=self.left,
                   alpha=self.alpha, beta=self.beta, gamma=self.gamma, temperature=self.temperature)
         net.to(self.device_id)
         if distributed:
