@@ -51,13 +51,18 @@ class GradientGraft(torch.autograd.Function):
 class Binarize(torch.autograd.Function):
     @staticmethod
     def forward(ctx, X):
-        y = torch.where(X > 0, torch.ones_like(X), torch.zeros_like(X))
-        return y
+        y = torch.sigmoid(X) > 0.5
+        return y.to(torch.float)
+        # y = torch.where(X > 0, torch.ones_like(X), torch.zeros_like(X))
+        # return y
     
     @staticmethod
     def backward(ctx, grad_output):
-        grad_input = grad_output.clone()
+        X, y = ctx.saved_tensors
+        grad_input = grad_output *  y * (1-y)
         return grad_input
+        # grad_input = grad_output.clone()
+        # return grad_input
 
 class FeatureBinarizer(nn.Module):
     def __init__(self, num_bins, input_shape, min_val=None, max_val=None):
