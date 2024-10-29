@@ -118,7 +118,9 @@ class RRL:
 
         # Set up logging and network initialization
         self._setup_logging(log_file)
-        self.net = self._alternative_initialize_net(dim_list, distributed)
+        self.net = self._alternative_initialize_net(dim_list, left, right, use_nlaf, estimated_grad, 
+                        use_skip, alpha, beta, gamma, temperature, distributed)
+
 
     def _setup_logging(self, log_file):
         logging.basicConfig(level=logging.DEBUG, filename=log_file if log_file else sys.stdout,
@@ -143,20 +145,21 @@ class RRL:
         return sum(layer.edge_count() * self.beta for layer in self.net.layer_list[1:-1])
 
     def l1_penalty(self):
-        return sum(layer.compute_l1_norm() * self.alpha for layer in self.net.layer_list[1:])
+        model_layers = self.net.layer_list[1:] if isinstance(self.net, torch.nn.parallel.DistributedDataParallel) else self.net.layer_list
+        return sum(layer.compute_l1_norm() * self.alpha for layer in model_layers[1:])
 
     def l2_penalty(self):
-        return sum(layer.compute_l2_norm() * self.gamma for layer in self.net.layer_list[1:])
+        model_layers = self.net.layer_list[1:] if isinstance(self.net, torch.nn.parallel.DistributedDataParallel) else self.net.layer_list
+        return sum(layer.compute_l2_norm() * self.gamma for layer in model_layers[1:])
 
     def mixed_penalty(self):
-        # Alternative mixed penalty implementation
-        penalty = sum(layer.compute_l2_norm() * self.gamma for layer in self.net.layer_list[1:-1])
+        model_layers = self.net.layer_list[1:] if isinstance(self.net, torch.nn.parallel.DistributedDataParallel) else self.net.layer_list
+        penalty = sum(layer.compute_l2_norm() * self.gamma for layer in model_layers[1:-1])
         penalty += self.net.layer_list[-1].compute_l1_norm() * self.alpha
         return penalty
 
     @staticmethod
     def exp_lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_rate=0.9, lr_decay_epoch=7):
-        # Alternative learning rate scheduling using torch's built-in scheduler
         scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=lr_decay_rate)
         scheduler.step(epoch // lr_decay_epoch)
         return optimizer
