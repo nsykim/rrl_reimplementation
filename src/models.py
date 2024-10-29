@@ -120,7 +120,7 @@ class RRL:
 
         # Set up logging and network initialization
         self._setup_logging(log_file)
-        self.net = self._initialize_net(dim_list, dim_list, distributed)
+        self.net = self._initialize_net(dim_list, distributed)
 
 
     def _setup_logging(self, log_file):
