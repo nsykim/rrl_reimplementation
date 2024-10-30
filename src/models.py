@@ -137,7 +137,7 @@ class RRL:
     """
     RRL (Rule-based Representational Learner) class for implementing a neural network with various features such as skip connections, 
     novel activation functions, and distributed data parallelism.
-    Attributes:
+    Args:
         use_nlaf (bool): Flag to use novel activation functions.
         best_f1 (float): Best F1 score achieved during training.
         best_loss (float): Best loss achieved during training.
