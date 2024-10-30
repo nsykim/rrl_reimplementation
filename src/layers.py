@@ -373,6 +373,7 @@ class OriginalDisjunctionLayer(nn.Module):
         stochastic_grad (bool, optional): If True, use EstimatedProduct for stochastic gradient estimation.
     """
     def __init__(self, num_disjunctions, input_shape, stochastic_grad=False):
+        """ Initializes the OriginalDisjunctionLayer """
         super(OriginalDisjunctionLayer, self).__init__()
         self.num_disjunctions = num_disjunctions
         self.input_shape = input_shape
@@ -383,23 +384,32 @@ class OriginalDisjunctionLayer(nn.Module):
         self.prod = EstimatedProduct if stochastic_grad else Product
 
     def forward(self, inputs):
+        """ Perform a forward pass through the layer """
         continuous_output = self.continuous_forward(inputs)
         binarized_output = self.binarized_forward(inputs)
         return GradientGraft.apply(binarized_output, continuous_output)
 
     def continuous_forward(self, inputs):
+        """ Perform a continuous forward pass through the layer """
         return 1 - self.prod.apply(1 - inputs.unsqueeze(-1) * self.weights)
 
     @torch.no_grad()
     def binarized_forward(self, inputs):
+        """ Perform a binarized forward pass through the layer """
         binarized_weights = Binarize.apply(self.weights - THRESHOLD)
         return 1 - torch.prod(1 - inputs.unsqueeze(-1) * binarized_weights, dim=1)
 
     def clip_weights(self):
+        """" Clip the weights of the layer """
         self.weights.data.clamp_(0.0, 1.0)
 
 
 def extract_rules(previous_layer, skip_connection_layer, current_layer, position_shift=0):
+    """
+    Extracts rules from the current layer based on the weights and activation nodes, 
+    considering connections from the previous layer and an optional skip connection layer.
+    """
+
     dimIDs = defaultdict(lambda: -1)
     rules = {}
     rule_counter = 0
@@ -410,7 +420,7 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
 
     # Merge dimIDs from the previous layer and skip connection layer (if available)
     merged_node_map = previous_node_map = {key: (-1, val) for key, val in previous_layer.dimIDs.items()}
-    if skip_connection_layer is not None:
+    if skip_connection_layer is not None: # if we have skips, make sure to shift everything as needed
         shifted_node_map = {
             (key + previous_layer.output_dim): (-2, val) 
             for key, val in skip_connection_layer.dimIDs.items()
@@ -437,7 +447,6 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
             discrete_features = torch.cat((previous_layer.cl.t().reshape(-1), previous_layer.cl.t().reshape(-1))).detach().cpu().numpy()
 
         for weight_index, weight in enumerate(weights_row):
-            # Handling for 'NOT' logic in input dimensions
             negate_input = 1
             # Only consider positive weights and valid previous mappings
             if weight > 0 and merged_node_map[weight_index][1] != -1:
@@ -478,7 +487,20 @@ def extract_rules(previous_layer, skip_connection_layer, current_layer, position
     return dimIDs, rule_list
 
 class UnionLayer(nn.Module):
+    """
+    A neural network layer that combines conjunction and disjunction operations.
+    Args:
+        units (int): Number of conjunctions and disjunctions.
+        input_shape (tuple): Shape of the input tensor.
+        use_novel_activation (bool, optional): Whether to use novel activation functions. Defaults to False.
+        estimated_grad (bool, optional): Whether to use estimated gradients. Defaults to False.
+        alpha (float, optional): Hyperparameter for novel activation. Defaults to 0.999.
+        beta (int, optional): Hyperparameter for novel activation. Defaults to 8.
+        gamma (int, optional): Hyperparameter for novel activation. Defaults to 1.
+    """
+
     def __init__(self, units, input_shape, use_novel_activation=False, estimated_grad=False, alpha=0.999, beta=8, gamma=1):
+        """ Initializes the UnionLayer """
         super(UnionLayer, self).__init__()
         self.units = units
         self.input_shape = input_shape
@@ -489,7 +511,7 @@ class UnionLayer(nn.Module):
         self.rule_name = None
         self.dimIDs = None
         
-        if use_novel_activation:
+        if use_novel_activation: 
             self.conjunction_layer = ConjunctionLayer(num_conjunctions=units, input_shape=input_shape, alpha=alpha, beta=beta, gamma=gamma)
             self.disjunction_layer = DisjunctionLayer(num_disjunctions=units, input_shape=input_shape, alpha=alpha, beta=beta, gamma=gamma)
         else:
@@ -497,30 +519,38 @@ class UnionLayer(nn.Module):
             self.disjunction_layer = OriginalDisjunctionLayer(num_disjunctions=units, input_shape=input_shape, stochastic_grad=estimated_grad)
 
     def forward(self, input_tensor):
+        """ Perform a forward pass through the layer """
         return torch.cat([self.conjunction_layer(input_tensor), self.disjunction_layer(input_tensor)], dim=1)
 
     def binarized_forward(self, input_tensor):
+        """ Perform a binarized forward pass through the layer """
         return torch.cat([self.conjunction_layer.binarized_forward(input_tensor), 
                           self.disjunction_layer.binarized_forward(input_tensor)], dim=1)
 
     def edge_count(self):
+        """ Compute the number of edges in the layer """
         return self._sum_binarized_weights(self.conjunction_layer) + self._sum_binarized_weights(self.disjunction_layer)
 
     def _sum_binarized_weights(self, layer):
+        """ Compute the sum of binarized weights for a given layer """
         binarized_weights = Binarize.apply(layer.weights - THRESHOLD)
         return torch.sum(binarized_weights)
 
     def compute_l1_norm(self):
+        """ Compute the L1 norm of the weights """
         return torch.sum(self.conjunction_layer.weights) + torch.sum(self.disjunction_layer.weights)
 
     def compute_l2_norm(self):
+        """ Compute the L2 norm of the weights """
         return torch.sum(self.conjunction_layer.weights ** 2) + torch.sum(self.disjunction_layer.weights ** 2)
 
     def clip_weights(self):
+        """ Clip the weights of the layer """
         self.conjunction_layer.clip_weights()
         self.disjunction_layer.clip_weights()
 
     def get_rules(self, previous_layer, skip_connection_layer):
+        """ Extract rules from the conjunction and disjunction layers """
         self._sync_layer_stats()
 
         conjunction_dimIDs, conjunction_rules = extract_rules(previous_layer, skip_connection_layer, self.conjunction_layer)
@@ -536,20 +566,24 @@ class UnionLayer(nn.Module):
         self.rule_list = (conjunction_rules, disjunction_rules)
 
     def _sync_layer_stats(self):
+        """ Synchronize the stats of the conjunction and disjunction layers """
         self.conjunction_layer.forward_tot = self.disjunction_layer.forward_tot = self.forward_tot
         self.conjunction_layer.activation_nodes = self.disjunction_layer.activation_nodes = self.activation_nodes
 
     def get_rule_description(self, input_rule_name, wrap=False):
+        """ Generate rule descriptions for the layer """
         self.rule_name = []
         for rules, operator in zip(self.rule_list, ('&', '|')):
             self._append_rule_descriptions(rules, input_rule_name, operator, wrap)
 
     def _append_rule_descriptions(self, rules, input_rule_name, operator, wrap):
+        """ Append rule descriptions to the rule_name list """
         for rule in rules:
             description = self._build_rule_description(rule, input_rule_name, operator, wrap)
             self.rule_name.append(description)
 
     def _build_rule_description(self, rule, input_rule_name, operator, wrap):
+        """ Build a rule description from the rule """
         rule_description = ''
         for i, (layer_shift, rule_id) in enumerate(rule):
             prefix = f' {operator} ' if i != 0 else ''
