@@ -55,49 +55,15 @@ def read_csv(data_path, info_path, shuffle=False):
 class DBEncoder:
     """
     A class used to encode and preprocess data for machine learning models.
-    Attributes
-    ----------
-    f_df : pd.DataFrame
-        DataFrame containing feature information.
-    discrete : bool, optional
-        Whether to treat discrete features separately (default is False).
-    y_one_hot : bool, optional
-        Whether to one-hot encode the target variable (default is True).
-    drop : str, optional
-        Specifies a column to drop from one-hot encoding (default is 'first').
-    Methods
-    -------
-    split_data(X_df)
-        Splits the input DataFrame into discrete and continuous data.
-    fit(X_df, y_df)
-        Fits the encoder to the input features and target variable.
-    transform(X_df, y_df, normalized=False, keep_stat=False)
-        Transforms the input features and target variable using the fitted encoder.
+    Args
+        f_df (pd.DataFrame): DataFrame containing the feature names and types.
+        discrete (bool, optional): If True, only discrete features are used. Defaults to False.
+        y_one_hot (bool, optional): If True, one-hot encodes the target labels. Defaults to True.
+        drop (str, optional): The strategy used to drop one of the one-hot encoded columns. Defaults to 'first'.
     """
 
     def __init__(self, f_df, discrete=False, y_one_hot=True, drop='first'):
-        """
-        Initializes the data processing object.
-        Parameters:
-        f_df (pd.DataFrame): The input dataframe containing features.
-        discrete (bool): Flag indicating if the features are discrete. Default is False.
-        y_one_hot (bool): Flag indicating if the target variable should be one-hot encoded. Default is True.
-        drop (str): Specifies a column to drop when using one-hot encoding. Default is 'first'.
-        Attributes:
-        f_df (pd.DataFrame): The input dataframe containing features.
-        discrete (bool): Indicates if the features are discrete.
-        y_one_hot (bool): Indicates if the target variable is one-hot encoded.
-        label_enc (object): Encoder for the target variable.
-        feature_enc (object): Encoder for the features.
-        imp (SimpleImputer): Imputer for handling missing values.
-        scaler (StandardScaler): Scaler for standardizing features.
-        X_fname (str): Filename for the feature data.
-        y_fname (str): Filename for the target data.
-        discrete_flen (int): Length of discrete features.
-        continuous_flen (int): Length of continuous features.
-        mean (float): Mean of the features.
-        std (float): Standard deviation of the features.
-        """
+        """ Initializes the DBEncoder class """
         self.f_df = f_df
         self.discrete = discrete
         self.y_one_hot = y_one_hot
@@ -115,56 +81,25 @@ class DBEncoder:
         self.std = None
 
     def split_data(self, X_df):
-        """
-        Splits the input DataFrame into discrete and continuous data based on feature types.
-
-        Args:
-            X_df (pd.DataFrame): The input DataFrame containing the data to be split.
-
-        Returns:
-            tuple: A tuple containing two DataFrames:
-                - discrete_data (pd.DataFrame): DataFrame containing the discrete features.
-                - continuous_data (pd.DataFrame): DataFrame containing the continuous features.
-                    Missing values in continuous features are replaced with NaN and converted to numeric type.
-        """
+        """ Splits the input DataFrame into discrete and continuous data based on feature types """
         discrete_data = X_df[self.f_df[self.f_df[1] == 'discrete'].iloc[:, 0]]
         continuous_data = X_df[self.f_df[self.f_df[1] == 'continuous'].iloc[:, 0]]
-        if not continuous_data.empty:
-            continuous_data = continuous_data.replace(to_replace=r'.*\?.*', value=np.nan, regex=True)
-            continuous_data = continuous_data.apply(pd.to_numeric, errors='coerce')
+        if not continuous_data.empty:  
+            continuous_data = continuous_data.replace(to_replace=r'.*\?.*', value=np.nan, regex=True) # Replace '?' with NaN
+            continuous_data = continuous_data.apply(pd.to_numeric, errors='coerce') # Convert to numeric
         return discrete_data, continuous_data
 
     def fit(self, X_df, y_df):
-        """
-        Fits the data processing pipeline to the provided feature and target dataframes.
-        Parameters:
-        -----------
-        X_df : pandas.DataFrame
-            The input features dataframe.
-        y_df : pandas.DataFrame
-            The target labels dataframe.
-        Returns:
-        --------
-        None
-        Notes:
-        ------
-        - Resets the index of both X_df and y_df.
-        - Splits the input features into discrete and continuous data.
-        - Fits the label encoder to the target labels.
-        - Fits the imputer to the continuous data if available.
-        - Fits the feature encoder to the discrete data if available.
-        - Sets the feature names for both discrete and continuous data.
-        - Updates the lengths of discrete and continuous feature sets.
-        """
-        X_df = X_df.reset_index(drop=True)
+        """ Fits the encoder to the input data """
+        X_df = X_df.reset_index(drop=True)  
         y_df = y_df.reset_index(drop=True)
         discrete_data, continuous_data = self.split_data(X_df)
         
         if self.y_one_hot:
-            self.label_enc.fit(y_df)
+            self.label_enc.fit(y_df) # One-hot encoding for y
             self.y_fname = self.label_enc.get_feature_names() if hasattr(self.label_enc, 'get_feature_names') else y_df.columns
         else:
-            self.label_enc.fit(y_df.values.ravel())
+            self.label_enc.fit(y_df.values.ravel()) # Label encoding for y
             self.y_fname = y_df.columns
 
         if not continuous_data.empty:
@@ -184,20 +119,7 @@ class DBEncoder:
         self.continuous_flen = continuous_data.shape[1]
 
     def transform(self, X_df, y_df, normalized=False, keep_stat=False):
-        """
-        Transforms the input dataframes by encoding labels, imputing missing values, 
-        and optionally normalizing continuous features.
-        Parameters:
-        X_df (pd.DataFrame): DataFrame containing the feature data.
-        y_df (pd.DataFrame): DataFrame containing the target labels.
-        normalized (bool, optional): If True, normalizes the continuous features. Default is False.
-        keep_stat (bool, optional): If True, keeps the mean and standard deviation of the continuous features 
-                        for normalization. Default is False.
-        Returns:
-        tuple: A tuple containing:
-            - np.ndarray: Transformed feature data.
-            - np.ndarray: Transformed target labels.
-        """
+        """ Transforms the input data using the fitted encoder """
         X_df = X_df.reset_index(drop=True)
         y_df = y_df.reset_index(drop=True)
         discrete_data, continuous_data = self.split_data(X_df)
