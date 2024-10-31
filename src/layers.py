@@ -341,7 +341,7 @@ class OriginalConjunctionLayer(nn.Module):
         self.output_dim = self.num_conjunctions
         self.layer_type = 'conjunction'
 
-        self.weights = nn.Parameter(0.5 * torch.rand(self.input_shape, self.n))
+        self.weights = nn.Parameter(0.5 * torch.rand(self.input_shape, self.num_conjunctions))
         self.prod = EstimatedProduct if stochastic_grad else Product
 
     def forward(self, inputs):
