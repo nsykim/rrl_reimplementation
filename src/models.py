@@ -233,7 +233,7 @@ class RRL:
         f1_score_b = []
 
         criterion = nn.CrossEntropyLoss().cuda(self.device_id)
-        optimizer = torch.optim.SGD(self.net.parameters(), lr=lr, weight_decay=0.0)
+        optimizer = torch.optim.Adam(self.net.parameters(), lr=lr, weight_decay=0.0)
 
         cnt = -1
         avg_batch_loss_rrl = 0.0
