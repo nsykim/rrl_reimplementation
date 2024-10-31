@@ -97,7 +97,7 @@ class DBEncoder:
         
         if self.y_one_hot:
             self.label_enc.fit(y_df) # One-hot encoding for y
-            self.y_fname = self.label_enc.get_feature_names() if hasattr(self.label_enc, 'get_feature_names') else y_df.columns
+            self.y_fname = self.label_enc.get_feature_names_out() if hasattr(self.label_enc, 'get_feature_names') else y_df.columns
         else:
             self.label_enc.fit(y_df.values.ravel()) # Label encoding for y
             self.y_fname = y_df.columns
@@ -108,7 +108,7 @@ class DBEncoder:
         if not discrete_data.empty:
             self.feature_enc.fit(discrete_data)
             feature_names = discrete_data.columns
-            self.X_fname = list(self.feature_enc.get_feature_names()) if hasattr(self.feature_enc, 'get_feature_names') else feature_names.tolist()
+            self.X_fname = list(self.feature_enc.get_feature_names_out()) if hasattr(self.feature_enc, 'get_feature_names') else feature_names.tolist()
             self.discrete_flen = len(self.X_fname)
             if not self.discrete:
                 self.X_fname.extend(continuous_data.columns)
