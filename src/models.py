@@ -281,10 +281,10 @@ class RRL:
 
                 if cnt % (TEST_CNT_MOD * (1 if self.save_best else 10)) == 0:  # test the model
                     if valid_loader is not None:
-                        print('Testing on Validation Set...')   
+                        logging.debug('Testing on Validation Set')
                         acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation') 
                     else:
-                        print('Testing on Training Set...')
+                        logging.debug('Testing on Training Set')
                         acc_b, f1_b = self.test(test_loader=data_loader, set_name='Training')
                     
                     if self.save_best and (f1_b > self.best_f1 or (np.abs(f1_b - self.best_f1) < 1e-10 and self.best_loss > epoch_loss_rrl)): # save the best model
