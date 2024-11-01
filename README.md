@@ -5,14 +5,24 @@
 - Authors: Zhuo Wang, Wei Zhang, Ning Liu, Jianyong Wang
 
 
-## Set Up:
-### Requirements:
-- torch>=1.8.0
-- torchvision>=0.9.0
-- tensorboard>=1.15.0
-- sklearn>=0.23.2
-- numpy>=1.19.2
-- pandas>=1.1.3
-- matplotlib>=3.3.2
-- CUDA>=11.1
-- OR  ```pip install -r requirements.txt```
+## Usage:
+### Set Up:
+- Open a new google colab session (GPU is required)
+- Run the following code segment:
+    - Terminal: 
+        ```bash
+        git clone https://github.com/nsykim/rrl_reimplementation.git
+        cd rrl_reimplementation
+        pip install -r requirements.txt
+        ```
+    - Colab Cell:
+        ```colab
+        !git clone https://github.com/nsykim/rrl_reimplementation.git
+        %cd rrl_reimplementation
+        !pip install -r requirements.tx
+        ```
+- Run the cell containing main.py
+
+### Information: 
+- logging information can be found in logs/log.txt
+- results can be found in logs/test_results.txt
