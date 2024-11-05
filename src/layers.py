@@ -129,7 +129,8 @@ class FeatureBinarizer(nn.Module):
     def clip_weights(self):
         """ Clips the weights of the bin centers to be within the specified minimum and maximum values """
         if self.continuous_feature_count > 0 and self.min_val is not None and self.max_val is not None:
-            self.bin_centers.data = torch.clamp(self.bin_centers.data, self.min_val, self.max_val)
+            self.c1.data = torch.where(self.c1.data > self.min_val, self.min_val, self.c1.data)
+            self.c1.data = torch.where(self.c1.data < self.max_val, self.max_val, self.c1.data)
 
     def generate_feature_names(self, feature_names, mean=None, std=None):
         """ Generates feature names with bin centers and operators """
@@ -137,7 +138,7 @@ class FeatureBinarizer(nn.Module):
         for i in range(self.discrete_feature_count):
             feature_labels.append(feature_names[i])
         if self.continuous_feature_count > 0:
-            for c, op in zip(self.bin_centers.t(), ('<', '>')):
+            for c, op in i[(self.c1, '>'), (self.c1, '<=')]:
                 c = c.detach().cpu().numpy()
                 for i, center in enumerate(c.T):
                     fi_name = feature_names[self.discrete_feature_count + i]
