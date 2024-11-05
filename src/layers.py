@@ -133,20 +133,20 @@ class FeatureBinarizer(nn.Module):
 
     def generate_feature_names(self, feature_names, mean=None, std=None):
         """ Generates feature names with bin centers and operators """
-        feature_labels = feature_names[:self.input_shape[0]]
-
+        feature_labels = []
+        for i in range(self.discrete_feature_count):
+            feature_labels.append(feature_names[i])
         if self.continuous_feature_count > 0:
-            for center, operator in [(self.bin_centers, '>'), (self.bin_centers, '<=')]:
-                centers = center.detach().cpu().numpy()
-                for i, bin_vals in enumerate(centers.T):
-                    feature_name = feature_names[self.input_shape[0] + i]
-                    for val in bin_vals:
+            for c, op in zip(self.bin_centers.t(), ('<', '>')):
+                c = c.detach().cpu().numpy()
+                for i, center in enumerate(c.T):
+                    fi_name = feature_names[self.discrete_feature_count + i]
+                    for j in center:
                         if mean is not None and std is not None:
-                            val = val * std[feature_name] + mean[feature_name]
-                        feature_labels.append(f'{feature_name} {operator} {val:.3f}')
-
+                            j = j * std[i] + mean[i]
+                        feature_labels.append('{} {} {:.3f}'.format(fi_name, op, j))
         self.rule_name = feature_labels
-        return feature_labels
+        return self.rule_name
 
 class LinearRegressionLayer(nn.Module):
     """
