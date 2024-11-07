@@ -11,13 +11,13 @@
 - Run the following code segment:
     - Terminal: 
         ```bash
-        git clone https://github.com/nsykim/rrl_reimplementation.git
+        git clone {this-repository}
         cd rrl_reimplementation
         pip install -r requirements.txt
         ```
     - Colab Cell:
         ```colab
-        !git clone https://github.com/nsykim/rrl_reimplementation.git
+        !git clone {this-repository}
         %cd rrl_reimplementation
         !pip install -r requirements.tx
         ```
