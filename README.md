@@ -8,7 +8,7 @@
 ## Usage:
 ### Set Up:
 - Open a new google colab session (GPU is required)
-- Run the following code segment:
+- Run the following code segment OR manual set up:
     - Terminal: 
         ```bash
         git clone {this-repository}
@@ -21,7 +21,13 @@
         %cd rrl_reimplementation
         !pip install -r requirements.tx
         ```
-- Run the cell containing main.py
+    - Manual Set Up:
+        -  Download the repository
+        -  Import the repository into a colab session
+        -  In a new cell, run ```!cd rrl_reimplementation```
+- Copy and paste the main.py file into the colab session
+-  Run the cell containing main.py
+  
 
 ### Information: 
 - logging information can be found in logs/log.txt
